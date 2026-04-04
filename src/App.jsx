@@ -4,7 +4,8 @@
 // ============================================================
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Stage, Layer, Line, Rect, Ellipse, Circle, Text, Group } from 'react-konva';
+import { Stage, Layer, Line, Rect, Ellipse, Circle, Text, Group, Transformer, Image as KonvaImage } from 'react-konva';
+import useImage from 'use-image';
 import * as Y from 'yjs';
 import { io } from 'socket.io-client';
 import {
@@ -13,7 +14,7 @@ import {
 import {
   Pencil, Square, CircleIcon, Trash2,
   Undo2, Redo2, RotateCcw, MousePointer2,
-  Minus, Plus, Palette, Link, Check, StickyNote, X
+  Minus, Plus, Palette, Link, Check, StickyNote, X, Download
 } from 'lucide-react';
 import { Html } from 'react-konva-utils';
 import './index.css';
@@ -139,13 +140,27 @@ function StickyNoteItem({ id, noteMap, onDelete }) {
   );
 }
 
+// --- Image Component ---
+function WhiteboardImage({ shape, commonProps }) {
+  const [img] = useImage(shape.src);
+  return (
+    <KonvaImage
+      {...commonProps}
+      image={img}
+      width={shape.width}
+      height={shape.height}
+    />
+  );
+}
+
 function Whiteboard() {
   const { roomId } = useParams();
   const [tool, setTool] = useState('pen');
   const [color, setColor] = useState('#000000');
   const [strokeWidth, setStrokeWidth] = useState(3);
-  const [shapes, setShapes] = useState([]);
+  const [shapes, setShapes] = useState({});
   const [stickyNotes, setStickyNotes] = useState({});
+  const [selectedId, setSelectedId] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentShape, setCurrentShape] = useState(null);
 
@@ -162,8 +177,9 @@ function Whiteboard() {
   const [copied, setCopied] = useState(false);
 
   const stageRef = useRef(null);
+  const transformerRef = useRef(null);
   const ydocRef = useRef(null);
-  const yArrayRef = useRef(null);
+  const yShapesRef = useRef(null);
   const yNotesRef = useRef(null);
   const socketRef = useRef(null);
   const undoManagerRef = useRef(null);
@@ -179,13 +195,13 @@ function Whiteboard() {
     const ydoc = new Y.Doc();
     ydocRef.current = ydoc;
 
-    const yLines = ydoc.getArray('lines');
-    yArrayRef.current = yLines;
+    const yShapes = ydoc.getMap('shapes');
+    yShapesRef.current = yShapes;
 
     const yNotes = ydoc.getMap('stickyNotes');
     yNotesRef.current = yNotes;
 
-    const undoManager = new Y.UndoManager([yLines, yNotes], {
+    const undoManager = new Y.UndoManager([yShapes, yNotes], {
       trackedOrigins: new Set(['local']),
     });
     undoManagerRef.current = undoManager;
@@ -231,11 +247,15 @@ function Whiteboard() {
       }
     });
 
-    const observeHandler = () => {
-      setShapes(yLines.toArray());
+    const observeShapes = () => {
+      const shapesMap = {};
+      yShapes.forEach((val, key) => {
+        shapesMap[key] = val;
+      });
+      setShapes(shapesMap);
     };
-    yLines.observeDeep(observeHandler);
-    observeHandler();
+    yShapes.observeDeep(observeShapes);
+    observeShapes();
 
     const observeNotes = () => {
       const notes = {};
@@ -273,11 +293,37 @@ function Whiteboard() {
     setUserCount(Object.keys(remoteCursors).length + 1);
   }, [remoteCursors]);
 
+  // Handle Transformer Selection
+  useEffect(() => {
+    if (selectedId && transformerRef.current) {
+      const selectedNode = stageRef.current.findOne('#' + selectedId);
+      if (selectedNode) {
+        transformerRef.current.nodes([selectedNode]);
+        transformerRef.current.getLayer().batchDraw();
+      } else {
+        transformerRef.current.nodes([]);
+      }
+    } else if (transformerRef.current) {
+      transformerRef.current.nodes([]);
+    }
+  }, [selectedId, shapes]);
+
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.code === 'Space' && !e.repeat) {
         e.preventDefault();
         setSpaceHeld(true);
+      }
+      if (e.code === 'Delete' || e.code === 'Backspace') {
+        if (selectedId && tool === 'select') {
+          const yShapes = yShapesRef.current;
+          if (yShapes && yShapes.has(selectedId)) {
+            yShapes.doc.transact(() => {
+              yShapes.delete(selectedId);
+            }, 'local');
+            setSelectedId(null);
+          }
+        }
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
@@ -365,6 +411,14 @@ function Whiteboard() {
     }
 
     if (e.evt.button !== 0) return;
+
+    if (tool === 'select') {
+      const clickedOnEmpty = e.target === e.target.getStage();
+      if (clickedOnEmpty) {
+        setSelectedId(null);
+      }
+      return;
+    }
 
     const pos = getRelativePointerPos();
     if (!pos) return;
@@ -462,10 +516,11 @@ function Whiteboard() {
     }
 
     const ydoc = ydocRef.current;
-    const yLines = yArrayRef.current;
-    if (ydoc && yLines) {
+    const yShapes = yShapesRef.current;
+    if (ydoc && yShapes) {
+      const id = 'shape-' + Date.now();
       ydoc.transact(() => {
-        yLines.push([{ ...currentShape }]);
+        yShapes.set(id, { ...currentShape, id });
       }, 'local');
     }
 
@@ -475,15 +530,64 @@ function Whiteboard() {
 
   const handleClear = useCallback(() => {
     const ydoc = ydocRef.current;
-    const yLines = yArrayRef.current;
+    const yShapes = yShapesRef.current;
     const yNotes = yNotesRef.current;
-    if (ydoc && yLines) {
+    if (ydoc) {
       ydoc.transact(() => {
-        yLines.delete(0, yLines.length);
+        if (yShapes) yShapes.clear();
         if (yNotes) yNotes.clear();
       }, 'local');
     }
   }, []);
+
+  const handleExport = useCallback(() => {
+    const uri = stageRef.current.toDataURL();
+    const link = document.createElement('a');
+    link.download = `whiteboard-${roomId}-${Date.now()}.png`;
+    link.href = uri;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [roomId]);
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    const pos = stageRef.current.getPointerPosition();
+    const files = e.dataTransfer.files;
+
+    if (files.length > 0) {
+      const file = files[0];
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const yShapes = yShapesRef.current;
+          const id = 'image-' + Date.now();
+          const img = new Image();
+          img.onload = () => {
+            const aspect = img.width / img.height;
+            const w = 400;
+            const h = 400 / aspect;
+
+            yShapes.doc.transact(() => {
+              yShapes.set(id, {
+                id,
+                type: 'image',
+                src: reader.result,
+                x: (pos.x - stagePos.x) / stageScale - w / 2,
+                y: (pos.y - stagePos.y) / stageScale - h / 2,
+                width: w,
+                height: h,
+                color: '#000000',
+                strokeWidth: 0,
+              });
+            }, 'local');
+          };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  }, [stagePos, stageScale]);
 
   const resetView = useCallback(() => {
     setStagePos({ x: 0, y: 0 });
@@ -504,53 +608,75 @@ function Whiteboard() {
     }, 'local');
   }, []);
 
+  const handleShapeDragEnd = useCallback((id, e) => {
+    const yShapes = yShapesRef.current;
+    if (!yShapes) return;
+    const prev = yShapes.get(id);
+    if (!prev) return;
+
+    yShapes.doc.transact(() => {
+      if (prev.type === 'line') {
+        // For lines, update the whole points set if moving (or just x/y if we add them)
+        // For now, simpler to adjust x/y if we had them, but lines use relative points.
+        // Let's add x/y to the lines for easier movement.
+        yShapes.set(id, { ...prev, x: e.target.x(), y: e.target.y() });
+      } else {
+        yShapes.set(id, { ...prev, x: e.target.x(), y: e.target.y() });
+      }
+    }, 'local');
+  }, []);
+
   const renderedShapes = useMemo(() => {
-    return shapes.map((shape, i) => {
+    return Object.entries(shapes).map(([id, shape]) => {
       if (!shape) return null;
+      const isSelected = selectedId === id;
+      const commonProps = {
+        key: id,
+        id: id,
+        x: shape.x || 0,
+        y: shape.y || 0,
+        stroke: shape.color,
+        strokeWidth: shape.strokeWidth,
+        draggable: tool === 'select',
+        listening: tool === 'select',
+        onClick: () => tool === 'select' && setSelectedId(id),
+        onTap: () => tool === 'select' && setSelectedId(id),
+        onDragEnd: (e) => handleShapeDragEnd(id, e),
+      };
+
       switch (shape.type) {
         case 'line':
           return (
             <Line
-              key={i}
+              {...commonProps}
               points={shape.points}
-              stroke={shape.color}
-              strokeWidth={shape.strokeWidth}
               tension={0.5}
               lineCap="round"
               lineJoin="round"
-              listening={false}
             />
           );
         case 'rect':
           return (
             <Rect
-              key={i}
-              x={shape.x}
-              y={shape.y}
+              {...commonProps}
               width={shape.width}
               height={shape.height}
-              stroke={shape.color}
-              strokeWidth={shape.strokeWidth}
-              listening={false}
             />
           );
         case 'circle':
           return (
             <Ellipse
-              key={i}
-              x={shape.x}
-              y={shape.y}
+              {...commonProps}
               radiusX={shape.radiusX}
               radiusY={shape.radiusY}
-              stroke={shape.color}
-              strokeWidth={shape.strokeWidth}
-              listening={false}
             />
           );
+        case 'image':
+          return <WhiteboardImage shape={shape} commonProps={commonProps} />;
         default: return null;
       }
     });
-  }, [shapes]);
+  }, [shapes, tool, selectedId, handleShapeDragEnd]);
 
   const zoomPercent = Math.round(stageScale * 100);
 
@@ -568,6 +694,9 @@ function Whiteboard() {
           <span className="toolbar-label">Tools</span>
           <button className={`tool-btn ${tool === 'pen' ? 'active' : ''}`} onClick={() => setTool('pen')} title="Pen">
             <Pencil size={18} />
+          </button>
+          <button className={`tool-btn ${tool === 'select' ? 'active' : ''}`} onClick={() => setTool('select')} title="Selection">
+            <MousePointer2 size={18} />
           </button>
           <button className={`tool-btn ${tool === 'rect' ? 'active' : ''}`} onClick={() => setTool('rect')} title="Rectangle">
             <Square size={18} />
@@ -620,6 +749,10 @@ function Whiteboard() {
           <button className="tool-btn danger" onClick={handleClear} title="Clear All">
             <Trash2 size={18} />
           </button>
+          <div className="toolbar-divider" />
+          <button className="tool-btn" onClick={handleExport} title="Export PNG">
+            <Download size={18} />
+          </button>
         </div>
       </div>
 
@@ -649,10 +782,29 @@ function Whiteboard() {
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onWheel={handleWheel}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleDrop}
         style={{ position: 'absolute', top: 0, left: 0 }}
       >
-        <Layer listening={false}>{renderedShapes}</Layer>
-        <Layer>
+        {/* Layer 1: Background Grid (Passive) */}
+        <Layer listening={false} name="grid-layer">
+          <Rect
+            x={-stagePos.x / stageScale - 5000}
+            y={-stagePos.y / stageScale - 5000}
+            width={window.innerWidth / stageScale + 10000}
+            height={window.innerHeight / stageScale + 10000}
+            fill="#ffffff"
+            listening={false}
+          />
+        </Layer>
+
+        {/* Layer 2: Static Shapes (Highly Optimized) */}
+        <Layer name="static-shapes-layer">
+          {renderedShapes}
+        </Layer>
+
+        {/* Layer 3: Active/Interactive Items (Cursors, Notes, Current Line, Transformers) */}
+        <Layer name="active-layer">
           {Object.entries(stickyNotes).map(([id, noteMap]) => (
             <StickyNoteItem key={id} id={id} noteMap={noteMap} onDelete={deleteNote} />
           ))}
@@ -663,13 +815,14 @@ function Whiteboard() {
           )}
           {Object.entries(remoteCursors).map(([clientId, cursor]) => (
             cursor && (
-              <Group key={clientId}>
+              <Group key={clientId} listening={false}>
                 <Circle x={cursor.x} y={cursor.y} radius={6 / stageScale} fill={cursor.color} opacity={0.9} />
                 <Circle x={cursor.x} y={cursor.y} radius={10 / stageScale} stroke={cursor.color} strokeWidth={1.5 / stageScale} opacity={0.4} />
                 <Text x={cursor.x + 14 / stageScale} y={cursor.y + 4 / stageScale} text={cursor.name} fontSize={12 / stageScale} fill={cursor.color} fontFamily="Inter, sans-serif" fontStyle="600" />
               </Group>
             )
           ))}
+          {tool === 'select' && <Transformer ref={transformerRef} borderDash={[3, 3]} anchorCornerRadius={3} />}
         </Layer>
       </Stage>
     </div>
