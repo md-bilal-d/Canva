@@ -17,6 +17,8 @@ import {
   Minus, Plus, Palette, Link, Check, StickyNote, X, Download
 } from 'lucide-react';
 import { Html } from 'react-konva-utils';
+import AvatarStack from './components/AvatarStack.jsx';
+import UserProfile from './components/UserProfile.jsx';
 import './index.css';
 
 // --- Server URL ---
@@ -175,8 +177,54 @@ function Whiteboard() {
   const [connected, setConnected] = useState(false);
   const [userCount, setUserCount] = useState(1);
   const [copied, setCopied] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const stageRef = useRef(null);
+
+  const providerRef = useRef({
+    awareness: {
+      getLocalState: () => ({ user: { name: currentUser.name } }),
+      setLocalStateField: (field, value) => {
+        if (field === 'user' && value.name) {
+          currentUser.name = value.name;
+          if (socketRef.current?.connected) {
+             const stage = stageRef.current;
+             const pos = stage ? stage.getRelativePointerPosition() : null;
+             socketRef.current.emit('awareness-update', {
+               cursor: {
+                 x: pos ? pos.x : 0,
+                 y: pos ? pos.y : 0,
+                 name: currentUser.name,
+                 color: currentUser.color,
+               },
+             });
+          }
+        }
+      }
+    }
+  });
+
+  const stackUsers = useMemo(() => {
+    const local = { id: currentUser.id, clientId: 'local', name: currentUser.name, color: currentUser.color };
+    const remotes = Object.entries(remoteCursors).map(([clientId, cursor]) => ({
+      id: clientId,
+      clientId,
+      name: cursor.name,
+      color: cursor.color,
+    }));
+    return [local, ...remotes];
+  }, [remoteCursors]);
+
+  const handleAvatarClick = useCallback((user) => {
+    if (user.clientId === 'local') {
+      setIsProfileOpen(prev => !prev);
+    } else {
+      const cursor = remoteCursors[user.clientId];
+      if (cursor) {
+        setStagePos({ x: window.innerWidth / 2 - cursor.x * stageScale, y: window.innerHeight / 2 - cursor.y * stageScale });
+      }
+    }
+  }, [remoteCursors, stageScale]);
   const transformerRef = useRef(null);
   const ydocRef = useRef(null);
   const yShapesRef = useRef(null);
@@ -756,11 +804,21 @@ function Whiteboard() {
         </div>
       </div>
 
-      <div className="connection-status">
-        <div className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
-        <span className="status-text">{connected ? 'Live' : 'Offline'}</span>
-        <span className="user-count">{userCount} {userCount === 1 ? 'user' : 'users'}</span>
+      <div className="connection-status" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', boxShadow: 'none', right: '1.5rem', top: '1.5rem', padding: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', background: 'white', padding: '8px 16px', borderRadius: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9' }}>
+          <div className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
+          <span className="status-text" style={{ marginRight: 0 }}>{connected ? 'Live' : 'Offline'}</span>
+        </div>
+        <div style={{ background: 'white', display: 'flex', alignItems: 'center', borderRadius: '30px', padding: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9' }}>
+           <AvatarStack users={stackUsers} onAvatarClick={handleAvatarClick} />
+        </div>
       </div>
+
+      <UserProfile 
+         provider={providerRef.current}
+         isVisible={isProfileOpen} 
+         onClose={() => setIsProfileOpen(false)} 
+      />
 
       <div className="zoom-indicator">
         <button className="zoom-btn" onClick={() => setStageScale(s => Math.max(0.1, s / 1.2))}><Minus size={14} /></button>
