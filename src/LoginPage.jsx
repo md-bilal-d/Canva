@@ -46,6 +46,15 @@ export default function LoginPage() {
     }
   };
 
+  const handleGuestLogin = () => {
+    const randomDigits = Math.floor(1000 + Math.random() * 9000);
+    const guestName = `Guest-${randomDigits}`;
+    sessionStorage.setItem('isGuest', 'true');
+    sessionStorage.setItem('guestName', guestName);
+    sessionStorage.setItem('guestId', `guest-${randomDigits}`);
+    navigate('/', { replace: true });
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white font-sans w-full h-screen absolute inset-0 z-[100]">
       <div className="max-w-md w-full p-8 bg-gray-800 rounded-2xl shadow-2xl border border-gray-700 mx-4">
@@ -114,6 +123,15 @@ export default function LoginPage() {
             <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
           </svg>
           Google
+        </button>
+
+        <button
+          onClick={handleGuestLogin}
+          disabled={loading}
+          type="button"
+          className="w-full mt-4 py-3 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors font-medium flex justify-center items-center shadow-lg"
+        >
+          Continue as Guest
         </button>
 
         <p className="mt-8 text-center text-sm text-gray-400">

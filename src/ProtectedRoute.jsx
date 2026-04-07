@@ -16,7 +16,7 @@ export default function ProtectedRoute({ children }) {
     );
   }
 
-  if (!user) {
+  if (!user && sessionStorage.getItem('isGuest') !== 'true') {
     return <Navigate to="/login" replace />;
   }
 

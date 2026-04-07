@@ -8,17 +8,19 @@ import { Stage, Layer, Line, Rect, Ellipse, Circle, Text, Group, Transformer, Im
 import useImage from 'use-image';
 import * as Y from 'yjs';
 import { io } from 'socket.io-client';
-import {
-  Routes, Route, useNavigate, useParams, Navigate
-} from 'react-router-dom';
-import {
-  Pencil, Square, CircleIcon, Trash2,
-  Undo2, Redo2, RotateCcw, MousePointer2,
-  Minus, Plus, Palette, Link, Check, StickyNote, X, Download
-} from 'lucide-react';
-import { Html } from 'react-konva-utils';
+import { Routes, Route, useNavigate, useParams, Navigate } from 'react-router-dom';
 import AvatarStack from './components/AvatarStack.jsx';
 import UserProfile from './components/UserProfile.jsx';
+import useCurrentUser from './hooks/useCurrentUser.js';
+import GuestBanner from './components/GuestBanner.jsx';
+import TemplatesModal from './components/TemplatesModal.jsx';
+import { 
+  Pencil, Square, CircleIcon, Trash2,
+  Undo2, Redo2, RotateCcw, MousePointer2,
+  Minus, Plus, Palette, Link, Check, StickyNote, X, Download,
+  LayoutTemplate 
+} from 'lucide-react';
+import { Html } from 'react-konva-utils';
 import './index.css';
 
 // --- Server URL ---
@@ -45,7 +47,7 @@ function generateUser() {
   };
 }
 
-const currentUser = generateUser();
+const localUser = generateUser();
 
 // --- Throttle Helper ---
 function throttle(fn, delay) {
@@ -178,6 +180,16 @@ function Whiteboard() {
   const [userCount, setUserCount] = useState(1);
   const [copied, setCopied] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
+
+  const currentUserData = useCurrentUser();
+  const currentUser = useMemo(() => {
+    if (!currentUserData) return localUser;
+    return {
+      ...localUser,
+      ...currentUserData
+    };
+  }, [currentUserData]);
 
   const stageRef = useRef(null);
 
@@ -358,6 +370,11 @@ function Whiteboard() {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Prevent canvas shortcuts from interfering with typing in inputs/textareas
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        return;
+      }
+
       if (e.code === 'Space' && !e.repeat) {
         e.preventDefault();
         setSpaceHeld(true);
@@ -415,6 +432,11 @@ function Whiteboard() {
   );
 
   const handleWheel = useCallback((e) => {
+    // Ignore wheel events if we're hovering over a sticky note textarea so it can scroll
+    if (e.evt.target.tagName === 'TEXTAREA' || e.evt.target.tagName === 'INPUT') {
+      return;
+    }
+
     e.evt.preventDefault();
     const stage = stageRef.current;
     if (!stage) return;
@@ -736,6 +758,17 @@ function Whiteboard() {
         backgroundSize: `${20 * stageScale}px ${20 * stageScale}px, ${20 * stageScale}px ${20 * stageScale}px, ${100 * stageScale}px ${100 * stageScale}px, ${100 * stageScale}px ${100 * stageScale}px`,
       }}
     >
+      {currentUser.isGuest && <GuestBanner />}
+      
+      <TemplatesModal 
+        isOpen={isTemplatesOpen} 
+        onClose={() => setIsTemplatesOpen(false)}
+        yShapes={yShapesRef.current}
+        viewportCenter={{ 
+          x: (-stagePos.x + window.innerWidth / 2) / stageScale,
+          y: (-stagePos.y + window.innerHeight / 2) / stageScale 
+        }}
+      />
       {/* ====== TOOLBAR ====== */}
       <div className="toolbar">
         <div className="toolbar-section">
@@ -782,6 +815,17 @@ function Whiteboard() {
           </button>
           <button className="tool-btn" onClick={() => undoManagerRef.current?.redo()} disabled={!canRedo} title="Redo">
             <Redo2 size={18} />
+          </button>
+        </div>
+        <div className="toolbar-divider" />
+        <div className="toolbar-section">
+          <span className="toolbar-label">Templates</span>
+          <button 
+            className={`tool-btn ${isTemplatesOpen ? 'active' : ''}`}
+            onClick={() => setIsTemplatesOpen(true)}
+            title="Templates"
+          >
+            <LayoutTemplate size={18} />
           </button>
         </div>
         <div className="toolbar-divider" />
