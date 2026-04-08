@@ -4,8 +4,7 @@
 // ============================================================
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Stage, Layer, Line, Rect, Ellipse, Circle, Text, Group, Transformer, Image as KonvaImage } from 'react-konva';
-import useImage from 'use-image';
+import { Stage, Layer, Line, Rect, Ellipse, Circle, Text, Group, Transformer } from 'react-konva';
 import * as Y from 'yjs';
 import { io } from 'socket.io-client';
 import { Routes, Route, useNavigate, useParams, Navigate } from 'react-router-dom';
@@ -14,12 +13,16 @@ import UserProfile from './components/UserProfile.jsx';
 import useCurrentUser from './hooks/useCurrentUser.js';
 import GuestBanner from './components/GuestBanner.jsx';
 import TemplatesModal from './components/TemplatesModal.jsx';
+import EmojiPicker from './components/EmojiPicker.jsx';
+import FloatingEmoji from './components/FloatingEmoji.jsx';
+import useEmojiReactions from './hooks/useEmojiReactions.js';
 import { 
   Pencil, Square, CircleIcon, Trash2,
   Undo2, Redo2, RotateCcw, MousePointer2,
   Minus, Plus, Palette, Link, Check, StickyNote, X, Download,
-  LayoutTemplate 
+  LayoutTemplate, Phone
 } from 'lucide-react';
+import CallPanel from './components/CallPanel.jsx';
 import { Html } from 'react-konva-utils';
 import './index.css';
 
@@ -144,19 +147,6 @@ function StickyNoteItem({ id, noteMap, onDelete }) {
   );
 }
 
-// --- Image Component ---
-function WhiteboardImage({ shape, commonProps }) {
-  const [img] = useImage(shape.src);
-  return (
-    <KonvaImage
-      {...commonProps}
-      image={img}
-      width={shape.width}
-      height={shape.height}
-    />
-  );
-}
-
 function Whiteboard() {
   const { roomId } = useParams();
   const [tool, setTool] = useState('pen');
@@ -181,6 +171,10 @@ function Whiteboard() {
   const [copied, setCopied] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
+  const [editingLabelId, setEditingLabelId] = useState(null);
+  const [editingLabelText, setEditingLabelText] = useState('');
+  const [incomingCall, setIncomingCall] = useState(false);
+  const [activeEmoji, setActiveEmoji] = useState(null);
 
   const currentUserData = useCurrentUser();
   const currentUser = useMemo(() => {
@@ -195,24 +189,29 @@ function Whiteboard() {
 
   const providerRef = useRef({
     awareness: {
-      getLocalState: () => ({ user: { name: currentUser.name } }),
-      setLocalStateField: (field, value) => {
-        if (field === 'user' && value.name) {
-          currentUser.name = value.name;
-          if (socketRef.current?.connected) {
-             const stage = stageRef.current;
-             const pos = stage ? stage.getRelativePointerPosition() : null;
-             socketRef.current.emit('awareness-update', {
-               cursor: {
-                 x: pos ? pos.x : 0,
-                 y: pos ? pos.y : 0,
-                 name: currentUser.name,
-                 color: currentUser.color,
-               },
-             });
-          }
+      listeners: [],
+      states: new Map(),
+      getLocalState: function() { return this.states.get('local') || { user: { name: currentUser.name } } },
+      setLocalStateField: function(field, value) {
+        const state = this.states.get('local') || {};
+        state[field] = value;
+        this.states.set('local', state);
+        
+        if (field === 'user' && value.name) currentUser.name = value.name;
+
+        if (socketRef.current?.connected) {
+           const stage = stageRef.current;
+           const pos = stage ? stage.getRelativePointerPosition() : null;
+           socketRef.current.emit('awareness-update', {
+             cursor: { x: pos ? pos.x : 0, y: pos ? pos.y : 0, name: currentUser.name, color: currentUser.color },
+             emojiReaction: field === 'emojiReaction' ? value : state.emojiReaction
+           });
         }
-      }
+        this.listeners.forEach(fn => fn({ added: [], updated: ['local'], removed: [] }));
+      },
+      getStates: function() { return this.states; },
+      on: function(event, fn) { if (event === 'change') this.listeners.push(fn); },
+      off: function(event, fn) { if (event === 'change') this.listeners = this.listeners.filter(l => l !== fn); }
     }
   });
 
@@ -239,12 +238,15 @@ function Whiteboard() {
   }, [remoteCursors, stageScale]);
   const transformerRef = useRef(null);
   const ydocRef = useRef(null);
+  const [activeDoc, setActiveDoc] = useState(null);
   const yShapesRef = useRef(null);
   const yNotesRef = useRef(null);
   const socketRef = useRef(null);
   const undoManagerRef = useRef(null);
   const panStartRef = useRef(null);
   const drawStartRef = useRef(null);
+
+  const { reactions, addReaction } = useEmojiReactions(activeDoc, providerRef.current, currentUser);
 
   // Update page title
   useEffect(() => {
@@ -254,6 +256,7 @@ function Whiteboard() {
   useEffect(() => {
     const ydoc = new Y.Doc();
     ydocRef.current = ydoc;
+    setActiveDoc(ydoc);
 
     const yShapes = ydoc.getMap('shapes');
     yShapesRef.current = yShapes;
@@ -332,6 +335,12 @@ function Whiteboard() {
         ...prev,
         [data.clientId]: data.cursor,
       }));
+      const aw = providerRef.current.awareness;
+      const remoteState = aw.states.get(data.clientId) || {};
+      if (data.emojiReaction) remoteState.emojiReaction = data.emojiReaction;
+      else delete remoteState.emojiReaction;
+      aw.states.set(data.clientId, remoteState);
+      aw.listeners.forEach(fn => fn({ added: [], updated: [data.clientId], removed: [] }));
     });
 
     socket.on('awareness-remove', (clientId) => {
@@ -339,6 +348,19 @@ function Whiteboard() {
         const next = { ...prev };
         delete next[clientId];
         return next;
+      });
+      const aw = providerRef.current.awareness;
+      aw.states.delete(clientId);
+      aw.listeners.forEach(fn => fn({ added: [], updated: [], removed: [clientId] }));
+    });
+
+    socket.on('call-user-joined', () => {
+      // If we are not already in the call, show the incoming call prompt
+      setIsCallOpen(prev => {
+        if (!prev) {
+          setIncomingCall(true);
+        }
+        return prev;
       });
     });
 
@@ -470,6 +492,13 @@ function Whiteboard() {
   }, []);
 
   const handleMouseDown = useCallback((e) => {
+    const pointer = stageRef.current.getPointerPosition();
+    const relPos = getRelativePointerPos();
+    if (activeEmoji && relPos && e.evt.button === 0 && !spaceHeld) {
+      addReaction(activeEmoji, relPos.x, relPos.y);
+      return;
+    }
+
     if (spaceHeld || e.evt.button === 1) {
       setIsPanning(true);
       const pointer = stageRef.current.getPointerPosition();
@@ -685,26 +714,62 @@ function Whiteboard() {
     if (!prev) return;
 
     yShapes.doc.transact(() => {
-      if (prev.type === 'line') {
-        // For lines, update the whole points set if moving (or just x/y if we add them)
-        // For now, simpler to adjust x/y if we had them, but lines use relative points.
-        // Let's add x/y to the lines for easier movement.
-        yShapes.set(id, { ...prev, x: e.target.x(), y: e.target.y() });
-      } else {
-        yShapes.set(id, { ...prev, x: e.target.x(), y: e.target.y() });
-      }
+      yShapes.set(id, { ...prev, x: e.target.x(), y: e.target.y() });
     }, 'local');
   }, []);
+
+  const handleShapeTransformEnd = useCallback((id, e) => {
+    const node = e.target;
+    const yShapes = yShapesRef.current;
+    if (!yShapes) return;
+    const prev = yShapes.get(id);
+    if (!prev) return;
+
+    yShapes.doc.transact(() => {
+      yShapes.set(id, {
+        ...prev,
+        x: node.x(),
+        y: node.y(),
+        scaleX: node.scaleX(),
+        scaleY: node.scaleY(),
+        rotation: node.rotation(),
+      });
+    }, 'local');
+  }, []);
+
+  const handleDblClick = useCallback((id, shape) => {
+    if (tool !== 'select') return;
+    setEditingLabelId(id);
+    setEditingLabelText(shape.label || '');
+  }, [tool]);
+
+  const handleSaveLabel = useCallback(() => {
+    if (!editingLabelId) return;
+    const yShapes = yShapesRef.current;
+    if (!yShapes) return;
+    
+    const prev = yShapes.get(editingLabelId);
+    if (prev) {
+      yShapes.doc.transact(() => {
+        yShapes.set(editingLabelId, { ...prev, label: editingLabelText });
+      }, 'local');
+    }
+    setEditingLabelId(null);
+    setEditingLabelText('');
+  }, [editingLabelId, editingLabelText]);
+
 
   const renderedShapes = useMemo(() => {
     return Object.entries(shapes).map(([id, shape]) => {
       if (!shape) return null;
       const isSelected = selectedId === id;
       const commonProps = {
-        key: id,
         id: id,
         x: shape.x || 0,
         y: shape.y || 0,
+        rotation: shape.rotation || 0,
+        scaleX: shape.scaleX || 1,
+        scaleY: shape.scaleY || 1,
         stroke: shape.color,
         strokeWidth: shape.strokeWidth,
         draggable: tool === 'select',
@@ -712,12 +777,15 @@ function Whiteboard() {
         onClick: () => tool === 'select' && setSelectedId(id),
         onTap: () => tool === 'select' && setSelectedId(id),
         onDragEnd: (e) => handleShapeDragEnd(id, e),
+        onTransformEnd: (e) => handleShapeTransformEnd(id, e),
+        onDblClick: () => handleDblClick(id, shape),
       };
 
       switch (shape.type) {
         case 'line':
           return (
             <Line
+              key={id}
               {...commonProps}
               points={shape.points}
               tension={0.5}
@@ -727,22 +795,69 @@ function Whiteboard() {
           );
         case 'rect':
           return (
-            <Rect
-              {...commonProps}
-              width={shape.width}
-              height={shape.height}
-            />
+            <Group key={id}>
+              <Rect
+                {...commonProps}
+                width={shape.width}
+                height={shape.height}
+              />
+              {shape.label && (
+                <Text
+                  x={shape.x + (shape.width * (shape.scaleX || 1)) / 2}
+                  y={shape.y + (shape.height * (shape.scaleY || 1)) / 2}
+                  text={shape.label}
+                  fontSize={14}
+                  fill="#333333"
+                  align="center"
+                  verticalAlign="middle"
+                  width={shape.width * (shape.scaleX || 1)}
+                  height={shape.height * (shape.scaleY || 1)}
+                  offsetX={(shape.width * (shape.scaleX || 1)) / 2}
+                  offsetY={(shape.height * (shape.scaleY || 1)) / 2}
+                  listening={false}
+                />
+              )}
+            </Group>
           );
         case 'circle':
           return (
-            <Ellipse
+            <Group key={id}>
+              <Ellipse
+                {...commonProps}
+                radiusX={shape.radiusX}
+                radiusY={shape.radiusY}
+              />
+              {shape.label && (
+                <Text
+                  x={shape.x}
+                  y={shape.y}
+                  text={shape.label}
+                  fontSize={14}
+                  fill="#333333"
+                  align="center"
+                  verticalAlign="middle"
+                  width={shape.radiusX * 2 * (shape.scaleX || 1)}
+                  height={shape.radiusY * 2 * (shape.scaleY || 1)}
+                  offsetX={shape.radiusX * (shape.scaleX || 1)}
+                  offsetY={shape.radiusY * (shape.scaleY || 1)}
+                  listening={false}
+                />
+              )}
+            </Group>
+          );
+        case 'text':
+          return (
+            <Text
+              key={id}
               {...commonProps}
-              radiusX={shape.radiusX}
-              radiusY={shape.radiusY}
+              text={shape.text}
+              fontSize={shape.fontSize || 16}
+              fill={shape.color || '#000000'}
+              fontFamily={shape.fontFamily || 'Inter, sans-serif'}
+              fontStyle={shape.fontStyle || 'normal'}
+              strokeWidth={0} // Text should use fill for color, not stroke
             />
           );
-        case 'image':
-          return <WhiteboardImage shape={shape} commonProps={commonProps} />;
         default: return null;
       }
     });
@@ -773,19 +888,19 @@ function Whiteboard() {
       <div className="toolbar">
         <div className="toolbar-section">
           <span className="toolbar-label">Tools</span>
-          <button className={`tool-btn ${tool === 'pen' ? 'active' : ''}`} onClick={() => setTool('pen')} title="Pen">
+          <button className={`tool-btn ${tool === 'pen' ? 'active' : ''}`} onClick={() => { setTool('pen'); setActiveEmoji(null); }} title="Pen">
             <Pencil size={18} />
           </button>
-          <button className={`tool-btn ${tool === 'select' ? 'active' : ''}`} onClick={() => setTool('select')} title="Selection">
+          <button className={`tool-btn ${tool === 'select' ? 'active' : ''}`} onClick={() => { setTool('select'); setActiveEmoji(null); }} title="Selection">
             <MousePointer2 size={18} />
           </button>
-          <button className={`tool-btn ${tool === 'rect' ? 'active' : ''}`} onClick={() => setTool('rect')} title="Rectangle">
+          <button className={`tool-btn ${tool === 'rect' ? 'active' : ''}`} onClick={() => { setTool('rect'); setActiveEmoji(null); }} title="Rectangle">
             <Square size={18} />
           </button>
-          <button className={`tool-btn ${tool === 'circle' ? 'active' : ''}`} onClick={() => setTool('circle')} title="Circle">
+          <button className={`tool-btn ${tool === 'circle' ? 'active' : ''}`} onClick={() => { setTool('circle'); setActiveEmoji(null); }} title="Circle">
             <CircleIcon size={18} />
           </button>
-          <button className={`tool-btn ${tool === 'note' ? 'active' : ''}`} onClick={() => setTool('note')} title="Sticky Note">
+          <button className={`tool-btn ${tool === 'note' ? 'active' : ''}`} onClick={() => { setTool('note'); setActiveEmoji(null); }} title="Sticky Note">
             <StickyNote size={18} />
           </button>
         </div>
@@ -830,6 +945,31 @@ function Whiteboard() {
         </div>
         <div className="toolbar-divider" />
         <div className="toolbar-section">
+          <span className="toolbar-label">Reactions</span>
+          <EmojiPicker 
+            activeEmoji={activeEmoji}
+            onSelectEmoji={(e) => {
+               setActiveEmoji(e);
+               if (e) setTool('select');
+            }}
+          />
+        </div>
+        <div className="toolbar-divider" />
+        <div className="toolbar-section">
+          <span className="toolbar-label">Call</span>
+          <button 
+            className={`tool-btn ${isCallOpen ? 'active' : ''} ${incomingCall ? 'animate-pulse ring-2 ring-green-500' : ''}`} 
+            onClick={() => {
+              setIsCallOpen(!isCallOpen);
+              setIncomingCall(false);
+            }} 
+            title="Voice/Video Call"
+          >
+            <Phone size={18} className={isCallOpen ? "text-green-500" : ""} />
+          </button>
+        </div>
+        <div className="toolbar-divider" />
+        <div className="toolbar-section">
           <span className="toolbar-label">Share</span>
           <button className="tool-btn" onClick={handleCopyLink} title="Copy Link">
             {copied ? <Check size={18} color="#22c55e" /> : <Link size={18} />}
@@ -863,6 +1003,43 @@ function Whiteboard() {
          isVisible={isProfileOpen} 
          onClose={() => setIsProfileOpen(false)} 
       />
+
+      <CallPanel
+        isOpen={isCallOpen}
+        onClose={() => setIsCallOpen(false)}
+        socket={socketRef.current}
+        roomId={roomId}
+        currentUser={currentUser}
+      />
+
+      {incomingCall && !isCallOpen && (
+        <div className="absolute top-20 right-6 w-72 bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col z-[10000] overflow-hidden animate-in fade-in slide-in-from-top-4">
+          <div className="p-4 flex flex-col items-center justify-center bg-gray-50 text-center gap-2">
+            <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center animate-bounce mb-2">
+              <Phone size={24} />
+            </div>
+            <h3 className="font-semibold text-gray-800">Incoming Call</h3>
+            <p className="text-sm text-gray-500 mb-2">A collaborator has started a voice/video call in this room.</p>
+            <div className="flex gap-3 w-full mt-2">
+              <button 
+                onClick={() => setIncomingCall(false)}
+                className="flex-1 py-2 px-4 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors font-medium text-sm"
+              >
+                 Decline
+              </button>
+              <button 
+                onClick={() => {
+                  setIncomingCall(false);
+                  setIsCallOpen(true);
+                }}
+                className="flex-1 py-2 px-4 rounded-lg bg-green-500 text-white hover:bg-green-600 transition-colors font-medium text-sm shadow-sm"
+              >
+                 Accept
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="zoom-indicator">
         <button className="zoom-btn" onClick={() => setStageScale(s => Math.max(0.1, s / 1.2))}><Minus size={14} /></button>
@@ -905,6 +1082,63 @@ function Whiteboard() {
           {renderedShapes}
         </Layer>
 
+        {editingLabelId && (
+          <Layer>
+            <Html>
+              <div 
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  width: '100vw',
+                  height: '100vh',
+                  background: 'rgba(0,0,0,0.1)',
+                  zIndex: 2000,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                onClick={handleSaveLabel}
+              >
+                <div 
+                  className="bg-white p-2 rounded-lg shadow-2xl border flex flex-col gap-2 scale-in animate-in duration-200"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <textarea
+                    autoFocus
+                    className="w-64 h-32 p-3 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-sans"
+                    value={editingLabelText}
+                    onChange={e => setEditingLabelText(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSaveLabel();
+                      }
+                      if (e.key === 'Escape') {
+                        setEditingLabelId(null);
+                      }
+                    }}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button 
+                      onClick={() => setEditingLabelId(null)}
+                      className="px-3 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={handleSaveLabel}
+                      className="px-3 py-1 text-xs bg-indigo-600 text-white hover:bg-indigo-700 rounded shadow-sm"
+                    >
+                      Save Label
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Html>
+          </Layer>
+        )}
+
         {/* Layer 3: Active/Interactive Items (Cursors, Notes, Current Line, Transformers) */}
         <Layer name="active-layer">
           {Object.entries(stickyNotes).map(([id, noteMap]) => (
@@ -926,7 +1160,25 @@ function Whiteboard() {
           ))}
           {tool === 'select' && <Transformer ref={transformerRef} borderDash={[3, 3]} anchorCornerRadius={3} />}
         </Layer>
+
       </Stage>
+      
+      {/* Overlay for Floating Emojis (Screen Space, but coordinate-offset for canvas sync) */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 9999 }}>
+        {reactions.map(r => (
+          <div
+            key={r.id}
+            style={{
+              position: 'absolute',
+              left: r.x * stageScale + stagePos.x,
+              top: r.y * stageScale + stagePos.y,
+              transform: 'translate(-50%, -50%)',
+            }}
+          >
+            <FloatingEmoji reaction={r} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

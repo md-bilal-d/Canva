@@ -180,3 +180,6 @@ server.listen(PORT, () => {
   console.log(`\n🚀 Whiteboard server running on http://localhost:${PORT}`);
   console.log(`📁 Database: ${DB_PATH}\n`);
 });
+
+// --- WebRTC Signaling ---
+require('./callSignaling')(io);

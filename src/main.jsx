@@ -1,5 +1,11 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { Buffer } from 'buffer'
+import process from 'process'
+
+window.global = window
+window.Buffer = Buffer
+window.process = process
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './AuthContext.jsx'
 import LoginPage from './LoginPage.jsx'
