@@ -174,6 +174,7 @@ function Whiteboard() {
   const [editingLabelId, setEditingLabelId] = useState(null);
   const [editingLabelText, setEditingLabelText] = useState('');
   const [incomingCall, setIncomingCall] = useState(false);
+  const [isCallOpen, setIsCallOpen] = useState(false);
   const [activeEmoji, setActiveEmoji] = useState(null);
 
   const currentUserData = useCurrentUser();

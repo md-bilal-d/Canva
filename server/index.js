@@ -41,6 +41,10 @@ console.log(`[DB] SQLite database stored at: ${DB_PATH}`);
 
 const db = new Database(DB_PATH);
 
+// Enable WAL mode for better concurrency and robustness
+db.pragma('journal_mode = WAL');
+db.pragma('synchronous = NORMAL');
+
 // Create rooms table if it doesn't exist
 db.exec(`
   CREATE TABLE IF NOT EXISTS rooms (
@@ -183,3 +187,28 @@ server.listen(PORT, () => {
 
 // --- WebRTC Signaling ---
 require('./callSignaling')(io);
+
+// --- Feature Modules ---
+require('./notifications')(io, app, db);
+require('./sharing')(app, db);
+require('./boards')(app, db);
+require('./analytics')(app, io, db);
+
+// --- Graceful Shutdown ---
+process.on('SIGINT', () => {
+  console.log('\n[Server] Shutting down gracefully...');
+  db.close();
+  server.close(() => {
+    console.log('[Server] Closed.');
+    process.exit(0);
+  });
+});
+
+process.on('SIGTERM', () => {
+  console.log('\n[Server] Shutting down gracefully...');
+  db.close();
+  server.close(() => {
+    console.log('[Server] Closed.');
+    process.exit(0);
+  });
+});

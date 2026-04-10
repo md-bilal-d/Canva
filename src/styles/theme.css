@@ -1,0 +1,95 @@
+/* ============================================================
+   theme.css — Dark/Light mode CSS variables
+   ============================================================ */
+
+/* Light theme (default) */
+:root {
+  --bg: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --grid: #e5e7eb;
+  --grid-major: rgba(0, 0, 0, 0.1);
+  --toolbar-bg: rgba(24, 24, 32, 0.92);
+  --toolbar-bg-glass: rgba(24, 24, 32, 0.85);
+  --toolbar-border: rgba(255, 255, 255, 0.08);
+  --toolbar-shadow: 0 8px 32px rgba(0, 0, 0, 0.32);
+  --text: #111827;
+  --text-secondary: #6b7280;
+  --text-on-toolbar: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #f1f5f9;
+  --border: #e2e8f0;
+  --sidebar-bg: #ffffff;
+  --modal-bg: #ffffff;
+  --card-bg: #ffffff;
+  --input-bg: #fafbfc;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.1);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+
+/* Dark theme */
+.dark {
+  --bg: #1a1a2e;
+  --bg-secondary: #16213e;
+  --grid: #2d2d44;
+  --grid-major: rgba(255, 255, 255, 0.06);
+  --toolbar-bg: rgba(15, 15, 30, 0.95);
+  --toolbar-bg-glass: rgba(15, 15, 30, 0.9);
+  --toolbar-border: rgba(255, 255, 255, 0.06);
+  --toolbar-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --text: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-on-toolbar: #e2e8f0;
+  --surface: #1e293b;
+  --surface-hover: #334155;
+  --border: #334155;
+  --sidebar-bg: #1e293b;
+  --modal-bg: #1e293b;
+  --card-bg: #1e293b;
+  --input-bg: #0f172a;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* Apply dark mode overrides to common elements */
+.dark body,
+.dark #root {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.dark .canvas-container {
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+    linear-gradient(var(--grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px);
+}
+
+.dark .toolbar {
+  background: var(--toolbar-bg-glass);
+  border-color: var(--toolbar-border);
+  box-shadow: var(--toolbar-shadow);
+}
+
+.dark .zoom-indicator {
+  background: var(--toolbar-bg-glass);
+  border-color: var(--toolbar-border);
+}
+
+.dark .connection-status {
+  background: var(--toolbar-bg-glass);
+  border-color: var(--toolbar-border);
+}
+
+/* Dark mode transitions */
+body,
+.canvas-container,
+.toolbar,
+.zoom-indicator {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
