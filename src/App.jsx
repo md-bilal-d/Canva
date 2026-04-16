@@ -20,9 +20,12 @@ import {
   Pencil, Square, CircleIcon, Trash2,
   Undo2, Redo2, RotateCcw, MousePointer2,
   Minus, Plus, Palette, Link, Check, StickyNote, X, Download,
-  LayoutTemplate, Phone
+  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation
 } from 'lucide-react';
+import useConnectors, { computeConnectorPoints, getShapeEdgePoints } from './hooks/useConnectors.js';
 import CallPanel from './components/CallPanel.jsx';
+import AISidebar from './components/AISidebar.jsx';
+import ScenePanel from './components/ScenePanel.jsx';
 import { Html } from 'react-konva-utils';
 import './index.css';
 
@@ -175,6 +178,8 @@ function Whiteboard() {
   const [editingLabelText, setEditingLabelText] = useState('');
   const [incomingCall, setIncomingCall] = useState(false);
   const [isCallOpen, setIsCallOpen] = useState(false);
+  const [isAIOpen, setIsAIOpen] = useState(false);
+  const [isScenesOpen, setIsScenesOpen] = useState(false);
   const [activeEmoji, setActiveEmoji] = useState(null);
 
   const currentUserData = useCurrentUser();
@@ -248,8 +253,9 @@ function Whiteboard() {
   const drawStartRef = useRef(null);
 
   const { reactions, addReaction } = useEmojiReactions(activeDoc, providerRef.current, currentUser);
-
-  // Update page title
+  const { connectors, addConnector, updateConnector, removeConnector, recalculateForShape } = useConnectors(activeDoc);
+  const [connectingStart, setConnectingStart] = useState(null);
+  const [activeConnector, setActiveConnector] = useState(null);
   useEffect(() => {
     document.title = `Whiteboard — ${roomId}`;
   }, [roomId]);
@@ -438,6 +444,28 @@ function Whiteboard() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      
+      const emojiMap = { '1': '🎉', '2': '💖', '3': '🔥', '4': '👀', '5': '👍' };
+      if (emojiMap[e.key]) {
+          const stage = stageRef.current;
+          if (stage) {
+              let pointer = stage.getPointerPosition();
+              if (!pointer) {
+                  pointer = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+              }
+              const relX = (pointer.x - stagePos.x) / stageScale;
+              const relY = (pointer.y - stagePos.y) / stageScale;
+              addReaction(emojiMap[e.key], relX, relY);
+          }
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [addReaction, stagePos, stageScale]);
+
   const broadcastCursor = useCallback(
     throttle((pos) => {
       if (socketRef.current?.connected) {
@@ -572,6 +600,14 @@ function Whiteboard() {
       return;
     }
 
+    if (connectingStart && activeConnector) {
+      const pos = getRelativePointerPos();
+      if (pos) {
+        setActiveConnector(prev => ({ ...prev, to: pos }));
+      }
+      return;
+    }
+
     if (!isDrawing || !currentShape) return;
 
     const pos = getRelativePointerPos();
@@ -607,6 +643,12 @@ function Whiteboard() {
     if (isPanning) {
       setIsPanning(false);
       panStartRef.current = null;
+      return;
+    }
+
+    if (connectingStart) {
+      setConnectingStart(null);
+      setActiveConnector(null);
       return;
     }
 
@@ -686,6 +728,26 @@ function Whiteboard() {
         };
         reader.readAsDataURL(file);
       }
+    } else {
+      const urlText = e.dataTransfer.getData('URL') || e.dataTransfer.getData('text/plain');
+      if (urlText && (urlText.startsWith('http://') || urlText.startsWith('https://'))) {
+        const yShapes = yShapesRef.current;
+        if (!yShapes) return;
+        const id = 'link-' + Date.now();
+        yShapes.doc.transact(() => {
+          yShapes.set(id, {
+            id,
+            type: 'rect',
+            x: (pos.x - stagePos.x) / stageScale - 100,
+            y: (pos.y - stagePos.y) / stageScale - 30,
+            width: 200,
+            height: 60,
+            color: '#34d399',
+            strokeWidth: 3,
+            label: urlText.length > 30 ? urlText.substring(0, 27) + '...' : urlText
+          });
+        }, 'local');
+      }
     }
   }, [stagePos, stageScale]);
 
@@ -717,7 +779,9 @@ function Whiteboard() {
     yShapes.doc.transact(() => {
       yShapes.set(id, { ...prev, x: e.target.x(), y: e.target.y() });
     }, 'local');
-  }, []);
+    
+    recalculateForShape(id, shapes);
+  }, [shapes, recalculateForShape]);
 
   const handleShapeTransformEnd = useCallback((id, e) => {
     const node = e.target;
@@ -759,6 +823,94 @@ function Whiteboard() {
     setEditingLabelText('');
   }, [editingLabelId, editingLabelText]);
 
+
+
+  const renderEdgeDots = (shape) => {
+    if (tool !== 'connector' && selectedId !== shape.id) return null;
+    const pts = getShapeEdgePoints(shape);
+    return pts.map((pt, idx) => (
+      <Circle
+        key={`dot-${shape.id}-${idx}`}
+        x={pt.x}
+        y={pt.y}
+        radius={6}
+        fill="#6366f1"
+        stroke="#ffffff"
+        strokeWidth={2}
+        listening={tool === 'connector'}
+        onPointerDown={(e) => {
+          e.cancelBubble = true;
+          setConnectingStart({ shapeId: shape.id, point: pt });
+          setActiveConnector({ from: pt, to: pt });
+        }}
+        onPointerEnter={(e) => {
+           if (tool === 'connector') {
+               e.target.getStage().container().style.cursor = 'crosshair';
+               e.target.scale({ x: 1.5, y: 1.5 });
+           }
+        }}
+        onPointerLeave={(e) => {
+           if (tool === 'connector') {
+               e.target.getStage().container().style.cursor = 'default';
+               e.target.scale({ x: 1, y: 1 });
+           }
+        }}
+        onPointerUp={(e) => {
+           if (connectingStart && connectingStart.shapeId !== shape.id) {
+               e.cancelBubble = true;
+               // Get shape centers to determine control points natively
+               addConnector({
+                   fromShapeId: connectingStart.shapeId,
+                   toShapeId: shape.id,
+                   color
+               });
+               // Force recalculation for the newly added connector
+               setTimeout(() => recalculateForShape(shape.id, shapes), 50);
+               setConnectingStart(null);
+               setActiveConnector(null);
+               setTool('select');
+           }
+        }}
+      />
+    ));
+  };
+
+  const handleTransitionTo = useCallback((scene) => {
+    // Basic transition loop for scenes
+    // We must read the latest state values using refs or functional sets, 
+    // but functional updates with inside requestAnimationFrame are tricky. 
+    // Using current state at the start is fine for one-off animations.
+    
+    // To ensure fresh start values, we use state setter closures
+    let startTime = null;
+    const duration = 800; // ms
+
+    setStagePos(startPos => {
+        setStageScale(startScale => {
+            const animate = (time) => {
+              if (!startTime) startTime = time;
+              let progress = (time - startTime) / duration;
+              if (progress > 1) progress = 1;
+              
+              // easeInOutCubic
+              const ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+              setStagePos({
+                x: startPos.x + (scene.x - startPos.x) * ease,
+                y: startPos.y + (scene.y - startPos.y) * ease
+              });
+              setStageScale(startScale + (scene.scale - startScale) * ease);
+
+              if (progress < 1) {
+                requestAnimationFrame(animate);
+              }
+            };
+            requestAnimationFrame(animate);
+            return startScale; // No immediate update, rely on rAF
+        });
+        return startPos; // No immediate update, rely on rAF
+    });
+  }, []);
 
   const renderedShapes = useMemo(() => {
     return Object.entries(shapes).map(([id, shape]) => {
@@ -802,6 +954,7 @@ function Whiteboard() {
                 width={shape.width}
                 height={shape.height}
               />
+              {renderEdgeDots(shape)}
               {shape.label && (
                 <Text
                   x={shape.x + (shape.width * (shape.scaleX || 1)) / 2}
@@ -828,6 +981,7 @@ function Whiteboard() {
                 radiusX={shape.radiusX}
                 radiusY={shape.radiusY}
               />
+              {renderEdgeDots(shape)}
               {shape.label && (
                 <Text
                   x={shape.x}
@@ -876,6 +1030,26 @@ function Whiteboard() {
     >
       {currentUser.isGuest && <GuestBanner />}
       
+      <AISidebar 
+        isOpen={isAIOpen}
+        onClose={() => setIsAIOpen(false)}
+        ydoc={activeDoc}
+        viewportCenter={{ 
+          x: (-stagePos.x + window.innerWidth / 2) / stageScale,
+          y: (-stagePos.y + window.innerHeight / 2) / stageScale 
+        }}
+        stageScale={stageScale}
+      />
+
+      <ScenePanel
+        isOpen={isScenesOpen}
+        onClose={() => setIsScenesOpen(false)}
+        ydoc={activeDoc}
+        stagePos={stagePos}
+        stageScale={stageScale}
+        onTransitionTo={handleTransitionTo}
+      />
+
       <TemplatesModal 
         isOpen={isTemplatesOpen} 
         onClose={() => setIsTemplatesOpen(false)}
@@ -903,6 +1077,9 @@ function Whiteboard() {
           </button>
           <button className={`tool-btn ${tool === 'note' ? 'active' : ''}`} onClick={() => { setTool('note'); setActiveEmoji(null); }} title="Sticky Note">
             <StickyNote size={18} />
+          </button>
+          <button className={`tool-btn ${tool === 'connector' ? 'active' : ''}`} onClick={() => { setTool('connector'); setActiveEmoji(null); }} title="Connector Line">
+            <GitCommit size={18} />
           </button>
         </div>
         <div className="toolbar-divider" />
@@ -942,6 +1119,20 @@ function Whiteboard() {
             title="Templates"
           >
             <LayoutTemplate size={18} />
+          </button>
+          <button 
+            className={`tool-btn ${isAIOpen ? 'active' : ''}`}
+            onClick={() => setIsAIOpen(!isAIOpen)}
+            title="AI Design Assistant"
+          >
+            <Sparkles size={18} className={isAIOpen ? "text-indigo-500" : ""} />
+          </button>
+          <button 
+            className={`tool-btn ${isScenesOpen ? 'active' : ''}`}
+            onClick={() => setIsScenesOpen(!isScenesOpen)}
+            title="Presentation Scenes"
+          >
+            <Presentation size={18} className={isScenesOpen ? "text-blue-500" : ""} />
           </button>
         </div>
         <div className="toolbar-divider" />
@@ -1080,6 +1271,27 @@ function Whiteboard() {
 
         {/* Layer 2: Static Shapes (Highly Optimized) */}
         <Layer name="static-shapes-layer">
+          {Object.entries(connectors).map(([id, conn]) => {
+            if (!conn.fromPoint || !conn.toPoint) return null;
+            // Calculate a simple bezier curve without shape info if missing
+            const fx = conn.fromPoint.x, fy = conn.fromPoint.y, tx = conn.toPoint.x, ty = conn.toPoint.y;
+            const pts = [fx, fy, fx + (tx - fx)/2, fy, tx - (tx - fx)/2, ty, tx, ty];
+            
+            return (
+              <Group key={id}>
+                <Line
+                  points={pts}
+                  stroke={conn.color}
+                  strokeWidth={3}
+                  bezier={true}
+                  hitStrokeWidth={10}
+                  onDblClick={() => {
+                    if (tool === 'select') removeConnector(id);
+                  }}
+                />
+              </Group>
+            );
+          })}
           {renderedShapes}
         </Layer>
 
@@ -1142,6 +1354,14 @@ function Whiteboard() {
 
         {/* Layer 3: Active/Interactive Items (Cursors, Notes, Current Line, Transformers) */}
         <Layer name="active-layer">
+          {activeConnector && (
+            <Line
+                points={[activeConnector.from.x, activeConnector.from.y, activeConnector.to.x, activeConnector.to.y]}
+                stroke={color}
+                strokeWidth={3}
+                dash={[10, 5]}
+            />
+          )}
           {Object.entries(stickyNotes).map(([id, noteMap]) => (
             <StickyNoteItem key={id} id={id} noteMap={noteMap} onDelete={deleteNote} />
           ))}
