@@ -3,7 +3,7 @@
 // ============================================================
 
 import React, { useState, useEffect } from 'react';
-import { Pencil, Eraser, Palette, Undo2, Trash2 } from 'lucide-react';
+import { Pencil, Eraser, Palette, Undo2, Trash2, Box, Highlighter } from 'lucide-react';
 
 export default function MobileToolbar({
   tool,
@@ -12,6 +12,10 @@ export default function MobileToolbar({
   onColorChange,
   onUndo,
   onClear,
+  is3DEnabled,
+  onToggle3D,
+  isSketchMode,
+  onToggleSketch,
 }) {
   const [isMobile, setIsMobile] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -27,10 +31,10 @@ export default function MobileToolbar({
 
   const buttons = [
     { id: 'pen', icon: Pencil, label: 'Pen' },
-    { id: 'eraser', icon: Eraser, label: 'Eraser' },
+    { id: '3d', icon: Box, label: '3D', action: onToggle3D, active: is3DEnabled },
+    { id: 'sketch', icon: Highlighter, label: 'Sketch', action: onToggleSketch, active: isSketchMode },
     { id: 'color', icon: Palette, label: 'Color', action: () => setShowColorPicker(!showColorPicker) },
     { id: 'undo', icon: Undo2, label: 'Undo', action: onUndo },
-    { id: 'clear', icon: Trash2, label: 'Clear', action: onClear },
   ];
 
   return (
@@ -48,9 +52,10 @@ export default function MobileToolbar({
           gap: '6px',
           padding: '12px 16px',
           paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
-          background: 'rgba(24, 24, 32, 0.95)',
-          backdropFilter: 'blur(20px)',
-          borderTop: '1px solid rgba(255,255,255,0.08)',
+          background: 'rgba(255, 255, 255, 0.75)',
+          backdropFilter: 'blur(25px)',
+          borderTop: '1px solid rgba(255,255,255,0.3)',
+          boxShadow: '0 -10px 40px rgba(0,0,0,0.05)',
         }}
       >
         {buttons.map((btn) => {
@@ -78,9 +83,9 @@ export default function MobileToolbar({
                 minWidth: '48px',
                 minHeight: '48px',
                 border: 'none',
-                borderRadius: '14px',
-                background: isActive ? 'rgba(99, 102, 241, 0.25)' : 'transparent',
-                color: isActive ? '#6366f1' : 'rgba(255,255,255,0.5)',
+                borderRadius: '16px',
+                background: isActive || btn.active ? 'rgba(99, 102, 241, 0.12)' : 'transparent',
+                color: isActive || btn.active ? '#6366f1' : 'rgba(30, 41, 59, 0.6)',
                 cursor: 'pointer',
                 gap: '2px',
                 position: 'relative',

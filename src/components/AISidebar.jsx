@@ -89,6 +89,32 @@ export default function AISidebar({ isOpen, onClose, ydoc, viewportCenter, stage
                 </button>
             </div>
         </div>
+
+        <div className="flex flex-col gap-2 pt-2 border-t border-gray-100">
+            <span className="text-[10px] font-semibold tracking-wider text-gray-400 uppercase">Quick Intelligence</span>
+            <div className="grid grid-cols-2 gap-2">
+                <button 
+                  onClick={() => {
+                    insertDesignFromAI(ydoc, viewportCenter, stageScale, 'smartAlign', {});
+                    onClose();
+                  }}
+                  className="flex items-center gap-2 text-xs bg-slate-50 text-slate-700 p-2 rounded-lg hover:bg-slate-100 transition border border-slate-200"
+                >
+                    <TerminalSquare size={14} className="text-indigo-500" />
+                    Smart Align
+                </button>
+                <button 
+                  onClick={() => {
+                    insertDesignFromAI(ydoc, viewportCenter, stageScale, 'clusterStickyNotes', {});
+                    onClose();
+                  }}
+                  className="flex items-center gap-2 text-xs bg-slate-50 text-slate-700 p-2 rounded-lg hover:bg-slate-100 transition border border-slate-200"
+                >
+                    <Sparkles size={14} className="text-purple-500" />
+                    Cluster Notes
+                </button>
+            </div>
+        </div>
       </div>
 
       {/* Footer */}

@@ -20,12 +20,14 @@ import {
   Pencil, Square, CircleIcon, Trash2,
   Undo2, Redo2, RotateCcw, MousePointer2,
   Minus, Plus, Palette, Link, Check, StickyNote, X, Download,
-  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation
+  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter
 } from 'lucide-react';
 import useConnectors, { computeConnectorPoints, getShapeEdgePoints } from './hooks/useConnectors.js';
 import CallPanel from './components/CallPanel.jsx';
 import AISidebar from './components/AISidebar.jsx';
 import ScenePanel from './components/ScenePanel.jsx';
+import DynamicBackground from './components/DynamicBackground.jsx';
+import MobileToolbar from './components/MobileToolbar.jsx';
 import { Html } from 'react-konva-utils';
 import './index.css';
 
@@ -181,6 +183,9 @@ function Whiteboard() {
   const [isAIOpen, setIsAIOpen] = useState(false);
   const [isScenesOpen, setIsScenesOpen] = useState(false);
   const [activeEmoji, setActiveEmoji] = useState(null);
+  const [is3DEnabled, setIs3DEnabled] = useState(true);
+  const [isSketchMode, setIsSketchMode] = useState(false);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
 
   const currentUserData = useCurrentUser();
   const currentUser = useMemo(() => {
@@ -596,14 +601,44 @@ function Whiteboard() {
           x: pointer.x - panStartRef.current.x,
           y: pointer.y - panStartRef.current.y,
         });
+
+        if (is3DEnabled) {
+          const centerX = window.innerWidth / 2;
+          const centerY = window.innerHeight / 2;
+          const tx = (pointer.y - centerY) / 80;
+          const ty = (centerX - pointer.x) / 80;
+          setTilt({ x: tx, y: ty });
+        }
       }
       return;
     }
 
+    const findNearestSnapPoint = (pos) => {
+      let nearest = null;
+      let minDist = 40; // Snap radius
+      
+      Object.entries(shapes).forEach(([id, shape]) => {
+        const edges = getShapeEdgePoints(shape);
+        edges.forEach(edge => {
+          const dist = Math.sqrt(Math.pow(edge.x - pos.x, 2) + Math.pow(edge.y - pos.y, 2));
+          if (dist < minDist) {
+            minDist = dist;
+            nearest = { ...edge, shapeId: id };
+          }
+        });
+      });
+      return nearest;
+    };
+
     if (connectingStart && activeConnector) {
       const pos = getRelativePointerPos();
       if (pos) {
-        setActiveConnector(prev => ({ ...prev, to: pos }));
+        const snap = findNearestSnapPoint(pos);
+        setActiveConnector(prev => ({ 
+          ...prev, 
+          to: snap ? { x: snap.x, y: snap.y } : pos,
+          toShapeId: snap ? snap.shapeId : null
+        }));
       }
       return;
     }
@@ -643,10 +678,20 @@ function Whiteboard() {
     if (isPanning) {
       setIsPanning(false);
       panStartRef.current = null;
+      setTilt({ x: 0, y: 0 });
       return;
     }
 
     if (connectingStart) {
+      if (activeConnector && activeConnector.toShapeId && activeConnector.toShapeId !== connectingStart.shapeId) {
+        addConnector({
+          fromShapeId: connectingStart.shapeId,
+          toShapeId: activeConnector.toShapeId,
+          color
+        });
+        setTimeout(() => recalculateForShape(activeConnector.toShapeId, shapes), 50);
+        setTool('select');
+      }
       setConnectingStart(null);
       setActiveConnector(null);
       return;
@@ -660,9 +705,54 @@ function Whiteboard() {
     const ydoc = ydocRef.current;
     const yShapes = yShapesRef.current;
     if (ydoc && yShapes) {
+      let shapeToSave = { ...currentShape };
       const id = 'shape-' + Date.now();
+
+      // AUTO-SHAPE CONVERSION 
+      if (currentShape.type === 'line' && currentShape.points.length > 10) {
+        const pts = currentShape.points;
+        let minX = pts[0], maxX = pts[0], minY = pts[1], maxY = pts[1];
+        for (let i = 0; i < pts.length; i += 2) {
+          minX = Math.min(minX, pts[i]);
+          maxX = Math.max(maxX, pts[i]);
+          minY = Math.min(minY, pts[i + 1]);
+          maxY = Math.max(maxY, pts[i + 1]);
+        }
+        const w = maxX - minX;
+        const h = maxY - minY;
+        const distToStart = Math.sqrt(Math.pow(pts[0] - pts[pts.length - 2], 2) + Math.pow(pts[1] - pts[pts.length - 1], 2));
+
+        // If closed loop and reasonable size
+        if (distToStart < 50 && w > 30 && h > 30) {
+          const aspectRatio = Math.max(w, h) / Math.min(w, h);
+          if (aspectRatio < 1.3) {
+            // Circle
+            shapeToSave = {
+              type: 'circle',
+              x: minX + w / 2,
+              y: minY + h / 2,
+              radiusX: w / 2,
+              radiusY: h / 2,
+              color: currentShape.color,
+              strokeWidth: currentShape.strokeWidth
+            };
+          } else {
+            // Rect
+            shapeToSave = {
+              type: 'rect',
+              x: minX,
+              y: minY,
+              width: w,
+              height: h,
+              color: currentShape.color,
+              strokeWidth: currentShape.strokeWidth
+            };
+          }
+        }
+      }
+
       ydoc.transact(() => {
-        yShapes.set(id, { ...currentShape, id });
+        yShapes.set(id, { ...shapeToSave, id });
       }, 'local');
     }
 
@@ -946,7 +1036,34 @@ function Whiteboard() {
               lineJoin="round"
             />
           );
-        case 'rect':
+        case 'rect': {
+          if (isSketchMode) {
+            const w = shape.width * (shape.scaleX || 1);
+            const h = shape.height * (shape.scaleY || 1);
+            // Draw a rectangle as 4 lines with slight overlap and jitter
+            const jitter = 3;
+            const pts = [
+                0 + Math.random()*jitter-jitter/2, 0 + Math.random()*jitter-jitter/2,
+                w + Math.random()*jitter-jitter/2, 0 + Math.random()*jitter-jitter/2,
+                w + Math.random()*jitter-jitter/2, h + Math.random()*jitter-jitter/2,
+                0 + Math.random()*jitter-jitter/2, h + Math.random()*jitter-jitter/2,
+                0 + Math.random()*jitter-jitter/2, 0 + Math.random()*jitter-jitter/2
+            ];
+            return (
+              <Group key={id}>
+                <Line 
+                    {...commonProps}
+                    x={shape.x} y={shape.y}
+                    scaleX={1} scaleY={1}
+                    points={pts}
+                    tension={0.1}
+                    lineCap="round"
+                    lineJoin="round"
+                />
+                {renderEdgeDots(shape)}
+              </Group>
+            );
+          }
           return (
             <Group key={id}>
               <Rect
@@ -973,7 +1090,34 @@ function Whiteboard() {
               )}
             </Group>
           );
-        case 'circle':
+        case 'circle': {
+          if (isSketchMode) {
+            const rx = shape.radiusX * (shape.scaleX || 1);
+            const ry = shape.radiusY * (shape.scaleY || 1);
+            const pts = [];
+            const steps = 16;
+            const jitter = 2.5;
+            for (let i = 0; i <= steps; i++) {
+                const angle = (i / steps) * Math.PI * 2;
+                pts.push(
+                    Math.cos(angle) * rx + Math.random()*jitter-jitter/2,
+                    Math.sin(angle) * ry + Math.random()*jitter-jitter/2
+                );
+            }
+            return (
+              <Group key={id}>
+                <Line 
+                    {...commonProps}
+                    scaleX={1} scaleY={1}
+                    points={pts}
+                    tension={0.5}
+                    lineCap="round"
+                    closed={true}
+                />
+                {renderEdgeDots(shape)}
+              </Group>
+            );
+          }
           return (
             <Group key={id}>
               <Ellipse
@@ -1021,13 +1165,18 @@ function Whiteboard() {
   const zoomPercent = Math.round(stageScale * 100);
 
   return (
-    <div
-      className={`canvas-container ${spaceHeld || isPanning ? 'panning' : ''}`}
-      style={{
-        backgroundPosition: `${stagePos.x}px ${stagePos.y}px`,
-        backgroundSize: `${20 * stageScale}px ${20 * stageScale}px, ${20 * stageScale}px ${20 * stageScale}px, ${100 * stageScale}px ${100 * stageScale}px, ${100 * stageScale}px ${100 * stageScale}px`,
-      }}
-    >
+    <div className="canvas-container relative w-full h-full overflow-hidden bg-slate-50">
+      <DynamicBackground />
+      
+      <div 
+        className={`relative w-full h-full ${spaceHeld || isPanning ? 'panning' : ''} animate-fade-in`}
+        style={{
+          backgroundPosition: `${stagePos.x}px ${stagePos.y}px`,
+          backgroundSize: `${20 * stageScale}px ${20 * stageScale}px, ${20 * stageScale}px ${20 * stageScale}px, ${100 * stageScale}px ${100 * stageScale}px, ${100 * stageScale}px ${100 * stageScale}px`,
+          transform: is3DEnabled ? `perspective(1200px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)` : 'none',
+          transition: isPanning ? 'none' : 'transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)'
+        }}
+      >
       {currentUser.isGuest && <GuestBanner />}
       
       <AISidebar 
@@ -1060,7 +1209,7 @@ function Whiteboard() {
         }}
       />
       {/* ====== TOOLBAR ====== */}
-      <div className="toolbar">
+      <div className="toolbar animate-slide-up">
         <div className="toolbar-section">
           <span className="toolbar-label">Tools</span>
           <button className={`tool-btn ${tool === 'pen' ? 'active' : ''}`} onClick={() => { setTool('pen'); setActiveEmoji(null); }} title="Pen">
@@ -1080,6 +1229,21 @@ function Whiteboard() {
           </button>
           <button className={`tool-btn ${tool === 'connector' ? 'active' : ''}`} onClick={() => { setTool('connector'); setActiveEmoji(null); }} title="Connector Line">
             <GitCommit size={18} />
+          </button>
+          <div className="toolbar-divider" />
+          <button 
+            className={`tool-btn ${is3DEnabled ? 'active' : ''}`} 
+            onClick={() => setIs3DEnabled(!is3DEnabled)} 
+            title="Toggle 3D View"
+          >
+            <Box size={18} className={is3DEnabled ? "text-indigo-400" : ""} />
+          </button>
+          <button 
+            className={`tool-btn ${isSketchMode ? 'active' : ''}`} 
+            onClick={() => setIsSketchMode(!isSketchMode)} 
+            title="Toggle Sketch Mode"
+          >
+            <Highlighter size={18} className={isSketchMode ? "text-yellow-400" : ""} />
           </button>
         </div>
         <div className="toolbar-divider" />
@@ -1180,8 +1344,8 @@ function Whiteboard() {
         </div>
       </div>
 
-      <div className="connection-status" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', boxShadow: 'none', right: '1.5rem', top: '1.5rem', padding: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', background: 'white', padding: '8px 16px', borderRadius: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9' }}>
+      <div className="connection-status animate-fade-in" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', boxShadow: 'none', right: '1.5rem', top: '1.5rem', padding: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', background: 'white', padding: '8px 16px', borderRadius: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', backdropFilter: 'blur(10px)' }}>
           <div className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
           <span className="status-text" style={{ marginRight: 0 }}>{connected ? 'Live' : 'Offline'}</span>
         </div>
@@ -1233,10 +1397,10 @@ function Whiteboard() {
         </div>
       )}
 
-      <div className="zoom-indicator">
-        <button className="zoom-btn" onClick={() => setStageScale(s => Math.max(0.1, s / 1.2))}><Minus size={14} /></button>
+      <div className="zoom-indicator animate-fade-in shadow-xl">
+        <button className="zoom-btn" onClick={() => setStageScale(s => Math.max(0.1, s / 1.15))}><Minus size={14} /></button>
         <span className="zoom-value">{zoomPercent}%</span>
-        <button className="zoom-btn" onClick={() => setStageScale(s => Math.min(5, s * 1.2))}><Plus size={14} /></button>
+        <button className="zoom-btn" onClick={() => setStageScale(s => Math.min(5, s * 1.15))}><Plus size={14} /></button>
         <button className="zoom-btn" onClick={resetView} title="Reset View"><RotateCcw size={13} /></button>
       </div>
 
@@ -1257,14 +1421,14 @@ function Whiteboard() {
         onDrop={handleDrop}
         style={{ position: 'absolute', top: 0, left: 0 }}
       >
-        {/* Layer 1: Background Grid (Passive) */}
+        {/* Layer 1: Background Grid (Passive) - Transparent to show Aura */}
         <Layer listening={false} name="grid-layer">
           <Rect
             x={-stagePos.x / stageScale - 5000}
             y={-stagePos.y / stageScale - 5000}
             width={window.innerWidth / stageScale + 10000}
             height={window.innerHeight / stageScale + 10000}
-            fill="#ffffff"
+            fill="transparent"
             listening={false}
           />
         </Layer>
@@ -1400,6 +1564,20 @@ function Whiteboard() {
           </div>
         ))}
       </div>
+      
+      <MobileToolbar 
+        tool={tool}
+        color={color}
+        onToolChange={setTool}
+        onColorChange={setColor}
+        onUndo={() => undoManagerRef.current?.undo()}
+        onClear={handleClear}
+        is3DEnabled={is3DEnabled}
+        onToggle3D={() => setIs3DEnabled(!is3DEnabled)}
+        isSketchMode={isSketchMode}
+        onToggleSketch={() => setIsSketchMode(!isSketchMode)}
+      />
+     </div>
     </div>
   );
 }

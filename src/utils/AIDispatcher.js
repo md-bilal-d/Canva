@@ -98,6 +98,54 @@ export function insertDesignFromAI(ydoc, currentViewPos, scale, intent, params) 
           yNotes.clear();
           break;
       }
+      case 'smartAlign': {
+          // Align all shapes in a grid based on their current average position
+          const shapes = [];
+          yShapes.forEach((val, key) => shapes.push({ id: key, ...val }));
+          if (shapes.length === 0) break;
+
+          const cols = Math.ceil(Math.sqrt(shapes.length));
+          const spacing = 250;
+          const startX = centerX - (cols * spacing) / 2;
+          const startY = centerY - (Math.ceil(shapes.length / cols) * spacing) / 2;
+
+          shapes.sort((a, b) => (a.x + a.y) - (b.x + b.y)).forEach((shape, i) => {
+              const row = Math.floor(i / cols);
+              const col = i % cols;
+              yShapes.set(shape.id, {
+                  ...shape,
+                  x: startX + col * spacing,
+                  y: startY + row * spacing
+              });
+          });
+          break;
+      }
+      case 'clusterStickyNotes': {
+          // Group sticky notes by their background color
+          const notes = [];
+          yNotes.forEach((val, key) => notes.push({ id: key, map: val }));
+          if (notes.length === 0) break;
+
+          const groups = {};
+          notes.forEach(note => {
+              const color = note.map.get('backgroundColor') || 'default';
+              if (!groups[color]) groups[color] = [];
+              groups[color].push(note);
+          });
+
+          let groupIndex = 0;
+          Object.values(groups).forEach(group => {
+              const startX = centerX - 400 + (groupIndex % 2) * 500;
+              const startY = centerY - 300 + Math.floor(groupIndex / 2) * 400;
+              
+              group.forEach((note, i) => {
+                  note.map.set('x', startX + (i % 3) * 220);
+                  note.map.set('y', startY + Math.floor(i / 3) * 170);
+              });
+              groupIndex++;
+          });
+          break;
+      }
       default:
         console.warn('Unknown AI intent:', intent);
     }
