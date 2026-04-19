@@ -121,7 +121,7 @@ export function insertDesignFromAI(ydoc, currentViewPos, scale, intent, params) 
           break;
       }
       case 'clusterStickyNotes': {
-          // Group sticky notes by their background color
+          // Group sticky notes by their background color or content similarity (mock)
           const notes = [];
           yNotes.forEach((val, key) => notes.push({ id: key, map: val }));
           if (notes.length === 0) break;
@@ -135,14 +135,28 @@ export function insertDesignFromAI(ydoc, currentViewPos, scale, intent, params) 
 
           let groupIndex = 0;
           Object.values(groups).forEach(group => {
-              const startX = centerX - 400 + (groupIndex % 2) * 500;
-              const startY = centerY - 300 + Math.floor(groupIndex / 2) * 400;
+              const startX = centerX - 400 + (groupIndex % 2) * 450;
+              const startY = centerY - 300 + Math.floor(groupIndex / 2) * 350;
               
               group.forEach((note, i) => {
-                  note.map.set('x', startX + (i % 3) * 220);
-                  note.map.set('y', startY + Math.floor(i / 3) * 170);
+                  note.map.set('x', startX + (i % 3) * 210);
+                  note.map.set('y', startY + Math.floor(i / 3) * 160);
               });
               groupIndex++;
+          });
+          break;
+      }
+      case 'image': {
+          const id = 'shape-' + Date.now();
+          yShapes.set(id, {
+              id,
+              type: 'image',
+              src: params.src,
+              x: centerX - 200,
+              y: centerY - 150,
+              width: 400,
+              height: 300,
+              prompt: params.prompt
           });
           break;
       }

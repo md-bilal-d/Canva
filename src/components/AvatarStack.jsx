@@ -42,9 +42,14 @@ export const AvatarStack = ({ users, onAvatarClick, maxSize = 5 }) => {
             
             {/* Hover Tooltip */}
             <div className="absolute top-12 left-1/2 transform -translate-x-1/2 bg-gray-900 border border-gray-700 text-white text-xs px-3 py-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-lg z-50">
-               {name}
+               {name} {user.isPresenter && " (Presenting)"}
                <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45 border-t border-l border-gray-700"></div>
             </div>
+
+            {/* Live Presenting Badge */}
+            {user.isPresenter && (
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse z-50 shadow-sm" title="Presenting Live" />
+            )}
           </div>
         );
       })}

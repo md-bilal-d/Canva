@@ -27,8 +27,10 @@ import CallPanel from './components/CallPanel.jsx';
 import AISidebar from './components/AISidebar.jsx';
 import ScenePanel from './components/ScenePanel.jsx';
 import DynamicBackground from './components/DynamicBackground.jsx';
-import MobileToolbar from './components/MobileToolbar.jsx';
-import { Html } from 'react-konva-utils';
+import CursorChat from './components/CursorChat.jsx';
+import CanvasImage from './components/CanvasImage.jsx';
+import HistoryScrubber from './components/HistoryScrubber.jsx';
+import CodeExportPanel from './components/CodeExportPanel.jsx';
 import './index.css';
 
 // --- Server URL ---
@@ -95,6 +97,27 @@ function StickyNoteItem({ id, noteMap, onDelete }) {
     }, 'local');
   };
 
+  const evaluateFormula = (val) => {
+    if (val.startsWith('=')) {
+        try {
+            // Simple math evaluation
+            const expression = val.substring(1);
+            // Safety check: only allow numbers and basic math operators
+            if (/^[0-9+\-*/().\s]+$/.test(expression)) {
+                return eval(expression);
+            }
+            return "Err: Invalid";
+        } catch (e) {
+            return "Err: Syntax";
+        }
+    }
+    return val;
+  };
+
+  const currentText = text || '';
+  const isFormula = currentText.startsWith('=');
+  const formulaResult = isFormula ? evaluateFormula(currentText) : null;
+
   const handleDragEnd = (e) => {
     noteMap.doc.transact(() => {
       noteMap.set('x', e.target.x());
@@ -129,7 +152,7 @@ function StickyNoteItem({ id, noteMap, onDelete }) {
           }
         }}
       >
-        <div className="sticky-note-container">
+        <div className={`sticky-note-container ${isFormula ? 'formula-active' : ''}`}>
           <textarea
             ref={textareaRef}
             className="sticky-note-textarea"
@@ -137,6 +160,11 @@ function StickyNoteItem({ id, noteMap, onDelete }) {
             onInput={handleInput}
             placeholder="Type something..."
           />
+          {isFormula && (
+            <div className="absolute bottom-6 left-0 right-0 p-2 bg-indigo-600 text-white text-[10px] font-bold text-center pointer-events-none">
+                RESULT: {formulaResult}
+            </div>
+          )}
           <div
             className="sticky-note-delete"
             onPointerDown={(e) => {
@@ -186,6 +214,17 @@ function Whiteboard() {
   const [is3DEnabled, setIs3DEnabled] = useState(true);
   const [isSketchMode, setIsSketchMode] = useState(false);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  
+  // Phase 1 Features State
+  const [isChatting, setIsChatting] = useState(false);
+  const [chatText, setChatText] = useState('');
+  const [cursorTrail, setCursorTrail] = useState([]);
+  const [particles, setParticles] = useState([]);
+  const particleIdRef = useRef(0);
+  const [followUserId, setFollowUserId] = useState(null);
+  const [isBroadcastingView, setIsBroadcastingView] = useState(false);
+  const [momentumShapes, setMomentumShapes] = useState({}); // { id: { vx, vy } }
+  const [isCodeExportOpen, setIsCodeExportOpen] = useState(false);
 
   const currentUserData = useCurrentUser();
   const currentUser = useMemo(() => {
@@ -213,9 +252,10 @@ function Whiteboard() {
         if (socketRef.current?.connected) {
            const stage = stageRef.current;
            const pos = stage ? stage.getRelativePointerPosition() : null;
-           socketRef.current.emit('awareness-update', {
-             cursor: { x: pos ? pos.x : 0, y: pos ? pos.y : 0, name: currentUser.name, color: currentUser.color },
-             emojiReaction: field === 'emojiReaction' ? value : state.emojiReaction
+             emojiReaction: field === 'emojiReaction' ? value : state.emojiReaction,
+             chatText: field === 'chatText' ? value : state.chatText,
+             viewport: field === 'viewport' ? value : state.viewport,
+             isPresenter: field === 'isPresenter' ? value : state.isPresenter
            });
         }
         this.listeners.forEach(fn => fn({ added: [], updated: ['local'], removed: [] }));
@@ -228,25 +268,38 @@ function Whiteboard() {
 
   const stackUsers = useMemo(() => {
     const local = { id: currentUser.id, clientId: 'local', name: currentUser.name, color: currentUser.color };
-    const remotes = Object.entries(remoteCursors).map(([clientId, cursor]) => ({
-      id: clientId,
-      clientId,
-      name: cursor.name,
-      color: cursor.color,
-    }));
+    const remotes = Object.entries(remoteCursors).map(([clientId, cursor]) => {
+      const remoteState = providerRef.current.awareness.getStates().get(clientId);
+      return {
+        id: clientId,
+        clientId,
+        name: cursor.name,
+        color: cursor.color,
+        isPresenter: remoteState?.isPresenter
+      };
+    });
     return [local, ...remotes];
-  }, [remoteCursors]);
+  }, [remoteCursors, providerRef.current.awareness]);
 
   const handleAvatarClick = useCallback((user) => {
     if (user.clientId === 'local') {
       setIsProfileOpen(prev => !prev);
     } else {
       const cursor = remoteCursors[user.clientId];
-      if (cursor) {
-        setStagePos({ x: window.innerWidth / 2 - cursor.x * stageScale, y: window.innerHeight / 2 - cursor.y * stageScale });
+      const remoteState = providerRef.current.awareness.getStates().get(user.clientId);
+      
+      if (remoteState?.isPresenter && followUserId !== user.clientId) {
+          // Start following the presenter
+          setFollowUserId(user.clientId);
+          setStageScale(remoteState.viewport?.scale || 1);
+          setStagePos({ x: remoteState.viewport?.x || 0, y: remoteState.viewport?.y || 0 });
+      } else if (cursor) {
+          // Just jump to user
+          setStagePos({ x: window.innerWidth / 2 - cursor.x * stageScale, y: window.innerHeight / 2 - cursor.y * stageScale });
+          setFollowUserId(null); // Stop following if we manually jump
       }
     }
-  }, [remoteCursors, stageScale]);
+  }, [remoteCursors, stageScale, followUserId]);
   const transformerRef = useRef(null);
   const ydocRef = useRef(null);
   const [activeDoc, setActiveDoc] = useState(null);
@@ -351,6 +404,13 @@ function Whiteboard() {
       const remoteState = aw.states.get(data.clientId) || {};
       if (data.emojiReaction) remoteState.emojiReaction = data.emojiReaction;
       else delete remoteState.emojiReaction;
+      
+      if (data.chatText) remoteState.chatText = data.chatText;
+      else delete remoteState.chatText;
+
+      if (data.viewport) remoteState.viewport = data.viewport;
+      if (data.isPresenter !== undefined) remoteState.isPresenter = data.isPresenter;
+
       aw.states.set(data.clientId, remoteState);
       aw.listeners.forEach(fn => fn({ added: [], updated: [data.clientId], removed: [] }));
     });
@@ -376,12 +436,28 @@ function Whiteboard() {
       });
     });
 
+    // Viewport Following Logic
+    const handleAwarenessChange = () => {
+        if (followUserId) {
+            const states = providerRef.current.awareness.getStates();
+            const leaderState = states.get(followUserId);
+            if (leaderState?.viewport && leaderState?.isPresenter) {
+                setStagePos({ x: leaderState.viewport.x, y: leaderState.viewport.y });
+                setStageScale(leaderState.viewport.scale);
+            } else if (!leaderState?.isPresenter) {
+                setFollowUserId(null); // Leader stopped presenting
+            }
+        }
+    };
+    providerRef.current.awareness.on('change', handleAwarenessChange);
+
     return () => {
       socket.disconnect();
       ydoc.destroy();
       undoManager.destroy();
+      providerRef.current.awareness.off('change', handleAwarenessChange);
     };
-  }, [roomId]);
+  }, [roomId, followUserId]);
 
   useEffect(() => {
     setUserCount(Object.keys(remoteCursors).length + 1);
@@ -432,6 +508,12 @@ function Whiteboard() {
         e.preventDefault();
         undoManagerRef.current?.redo();
       }
+
+      // Cursor Chat Toggle
+      if (e.key === '/' && !isChatting) {
+        e.preventDefault();
+        setIsChatting(true);
+      }
     };
 
     const handleKeyUp = (e) => {
@@ -480,12 +562,63 @@ function Whiteboard() {
             y: pos.y,
             name: currentUser.name,
             color: currentUser.color,
+            chatText: chatText
           },
         });
       }
     }, 40),
-    []
+    [chatText, currentUser]
   );
+
+  // Reaction Burst Logic
+  const spawnReactionBurst = useCallback((emoji, x, y) => {
+    const count = 12;
+    const newParticles = [];
+    for (let i = 0; i < count; i++) {
+        const angle = (Math.PI * 2 * i) / count;
+        const velocity = 2 + Math.random() * 4;
+        newParticles.push({
+            id: `p-${particleIdRef.current++}`,
+            emoji,
+            x,
+            y,
+            vx: Math.cos(angle) * velocity,
+            vy: Math.sin(angle) * velocity,
+            life: 1.0,
+            rotation: Math.random() * 360,
+            rv: (Math.random() - 0.5) * 20
+        });
+    }
+    setParticles(prev => [...prev, ...newParticles]);
+  }, []);
+
+  // Update Particles and Trails
+  useEffect(() => {
+    let frameId;
+    const update = () => {
+        setParticles(prev => {
+            if (prev.length === 0) return prev;
+            return prev
+                .map(p => ({
+                    ...p,
+                    x: p.x + p.vx,
+                    y: p.y + p.vy,
+                    vy: p.vy + 0.1, // gravity
+                    life: p.life - 0.02,
+                    rotation: p.rotation + p.rv
+                }))
+                .filter(p => p.life > 0);
+        });
+        frameId = requestAnimationFrame(update);
+    };
+    frameId = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(frameId);
+  }, []);
+
+  const addReactionWithBurst = useCallback((emoji, x, y) => {
+    addReaction(emoji, x, y);
+    spawnReactionBurst(emoji, x, y);
+  }, [addReaction, spawnReactionBurst]);
 
   const handleWheel = useCallback((e) => {
     // Ignore wheel events if we're hovering over a sticky note textarea so it can scroll
@@ -517,7 +650,18 @@ function Whiteboard() {
 
     setStageScale(newScale);
     setStagePos(newPos);
-  }, [stageScale, stagePos]);
+
+    if (isBroadcastingView) {
+        providerRef.current.awareness.setLocalStateField('viewport', { x: newPos.x, y: newPos.y, scale: newScale });
+    }
+  }, [stageScale, stagePos, isBroadcastingView]);
+
+  const updateViewportPos = useCallback((pos) => {
+    setStagePos(pos);
+    if (isBroadcastingView) {
+        providerRef.current.awareness.setLocalStateField('viewport', { ...pos, scale: stageScale });
+    }
+  }, [stageScale, isBroadcastingView]);
 
   const getRelativePointerPos = useCallback(() => {
     const stage = stageRef.current;
@@ -529,7 +673,7 @@ function Whiteboard() {
     const pointer = stageRef.current.getPointerPosition();
     const relPos = getRelativePointerPos();
     if (activeEmoji && relPos && e.evt.button === 0 && !spaceHeld) {
-      addReaction(activeEmoji, relPos.x, relPos.y);
+      addReactionWithBurst(activeEmoji, relPos.x, relPos.y);
       return;
     }
 
@@ -613,6 +757,15 @@ function Whiteboard() {
       return;
     }
 
+    // Ghost Trails logic
+    const pointer = stage.getPointerPosition();
+    if (pointer) {
+        setCursorTrail(prev => {
+            const next = [{ x: pointer.x, y: pointer.y, id: Date.now() }, ...prev];
+            return next.slice(0, 15); // Keep last 15 positions
+        });
+    }
+
     const findNearestSnapPoint = (pos) => {
       let nearest = null;
       let minDist = 40; // Snap radius
@@ -634,6 +787,13 @@ function Whiteboard() {
       const pos = getRelativePointerPos();
       if (pos) {
         const snap = findNearestSnapPoint(pos);
+        
+        // Haptic pulse effect when snapping
+        if (snap && snap.shapeId !== activeConnector.toShapeId) {
+            // Visualize snap point pulse (imaginary haptic)
+            spawnReactionBurst('✨', snap.x, snap.y);
+        }
+
         setActiveConnector(prev => ({ 
           ...prev, 
           to: snap ? { x: snap.x, y: snap.y } : pos,
@@ -755,10 +915,58 @@ function Whiteboard() {
         yShapes.set(id, { ...shapeToSave, id });
       }, 'local');
     }
+    
+    // Physics Momentum on Drag End
+    if (tool === 'select' && selectedId && !isDrawing) {
+        const shape = stageRef.current.findOne('#' + selectedId);
+        if (shape) {
+            const dragNode = shape;
+            const velocity = { vx: dragNode.x() - (dragNode._lastX || dragNode.x()), vy: dragNode.y() - (dragNode._lastY || dragNode.y()) };
+            if (Math.abs(velocity.vx) > 1 || Math.abs(velocity.vy) > 1) {
+                setMomentumShapes(prev => ({
+                    ...prev,
+                    [selectedId]: { vx: velocity.vx * 0.8, vy: velocity.vy * 0.8 }
+                }));
+            }
+        }
+    }
 
     setIsDrawing(false);
     setCurrentShape(null);
-  }, [isDrawing, isPanning, currentShape]);
+  }, [isDrawing, isPanning, currentShape, tool, selectedId]);
+
+  // Momentum Loop
+  useEffect(() => {
+    let frameId;
+    const update = () => {
+        setMomentumShapes(prev => {
+            const next = {};
+            let hasMomentum = false;
+            Object.entries(prev).forEach(([id, vel]) => {
+                const shape = shapes[id];
+                if (shape && (Math.abs(vel.vx) > 0.1 || Math.abs(vel.vy) > 0.1)) {
+                    hasMomentum = true;
+                    const nextVx = vel.vx * 0.95; // Friction
+                    const nextVy = vel.vy * 0.95;
+                    
+                    const newX = shape.x + vel.vx;
+                    const newY = shape.y + vel.vy;
+
+                    // Update Yjs
+                    const yShapes = yShapesRef.current;
+                    if (yShapes && yShapes.has(id)) {
+                        yShapes.set(id, { ...shape, x: newX, y: newY });
+                    }
+                    next[id] = { vx: nextVx, vy: nextVy };
+                }
+            });
+            return hasMomentum ? next : {};
+        });
+        frameId = requestAnimationFrame(update);
+    };
+    frameId = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(frameId);
+  }, [shapes]);
 
   const handleClear = useCallback(() => {
     const ydoc = ydocRef.current;
@@ -1090,6 +1298,7 @@ function Whiteboard() {
               )}
             </Group>
           );
+        }
         case 'circle': {
           if (isSketchMode) {
             const rx = shape.radiusX * (shape.scaleX || 1);
@@ -1143,6 +1352,16 @@ function Whiteboard() {
                 />
               )}
             </Group>
+          );
+        }
+        case 'image':
+          return (
+            <CanvasImage
+              key={id}
+              {...commonProps}
+              shape={shape}
+              draggable={tool === 'select'}
+            />
           );
         case 'text':
           return (
@@ -1298,6 +1517,21 @@ function Whiteboard() {
           >
             <Presentation size={18} className={isScenesOpen ? "text-blue-500" : ""} />
           </button>
+          <button 
+            className={`tool-btn ${isBroadcastingView ? 'active' : ''}`}
+            onClick={() => {
+                const nextState = !isBroadcastingView;
+                setIsBroadcastingView(nextState);
+                providerRef.current.awareness.setLocalStateField('isPresenter', nextState);
+                if (nextState) {
+                    providerRef.current.awareness.setLocalStateField('viewport', { x: stagePos.x, y: stagePos.y, scale: stageScale });
+                }
+            }}
+            title={isBroadcastingView ? "Stop Presenting" : "Present (Follow Me)"}
+          >
+            <div className={`w-2 h-2 rounded-full mr-1 ${isBroadcastingView ? 'bg-red-500 animate-pulse' : 'bg-gray-400'}`} />
+            <span className="text-[10px] font-bold">LIVE</span>
+          </button>
         </div>
         <div className="toolbar-divider" />
         <div className="toolbar-section">
@@ -1340,6 +1574,13 @@ function Whiteboard() {
           <div className="toolbar-divider" />
           <button className="tool-btn" onClick={handleExport} title="Export PNG">
             <Download size={18} />
+          </button>
+          <button 
+            className={`tool-btn ${isCodeExportOpen ? 'active' : ''}`} 
+            onClick={() => setIsCodeExportOpen(!isCodeExportOpen)} 
+            title="Export to React Code"
+          >
+            <Code size={18} className={isCodeExportOpen ? "text-blue-400" : ""} />
           </button>
         </div>
       </div>
@@ -1563,6 +1804,83 @@ function Whiteboard() {
             <FloatingEmoji reaction={r} />
           </div>
         ))}
+
+        {/* Reaction Burst Particles */}
+        {particles.map(p => (
+           <div
+             key={p.id}
+             style={{
+               position: 'absolute',
+               left: p.x * stageScale + stagePos.x,
+               top: p.y * stageScale + stagePos.y,
+               fontSize: `${24 * p.life}px`,
+               opacity: p.life,
+               transform: `translate(-50%, -50%) rotate(${p.rotation}deg)`,
+               pointerEvents: 'none',
+             }}
+           >
+             {p.emoji}
+           </div>
+        ))}
+
+        {/* Cursor Trails (Ghost Effects) */}
+        {cursorTrail.map((p, i) => (
+            <div 
+                key={p.id}
+                style={{
+                    position: 'absolute',
+                    left: p.x,
+                    top: p.y,
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    background: currentUser.color,
+                    opacity: (1 - i / cursorTrail.length) * 0.3,
+                    transform: 'translate(-50%, -50%)',
+                    pointerEvents: 'none',
+                }}
+            />
+        ))}
+
+        {/* Local Cursor Chat */}
+        {isChatting && (
+            <CursorChat 
+                isLocal={true}
+                x={stageRef.current.getPointerPosition().x}
+                y={stageRef.current.getPointerPosition().y}
+                color={currentUser.color}
+                value={chatText}
+                onChange={(val) => {
+                    setChatText(val);
+                    providerRef.current.awareness.setLocalStateField('chatText', val);
+                }}
+                onFinish={() => {
+                    setIsChatting(false);
+                    setTimeout(() => {
+                        setChatText('');
+                        providerRef.current.awareness.setLocalStateField('chatText', '');
+                    }, 3000); // Keep bubble visible for 3s
+                }}
+            />
+        )}
+
+        {/* Remote Cursor Chats */}
+        {Object.entries(remoteCursors).map(([clientId, cursor]) => {
+            const remoteState = providerRef.current.awareness.getStates().get(clientId);
+            if (remoteState?.chatText) {
+                return (
+                    <CursorChat 
+                        key={clientId}
+                        isLocal={false}
+                        x={cursor.x * stageScale + stagePos.x}
+                        y={cursor.y * stageScale + stagePos.y}
+                        color={cursor.color}
+                        value={remoteState.chatText}
+                    />
+                );
+            }
+            return null;
+        })}
       </div>
       
       <MobileToolbar 
@@ -1576,6 +1894,18 @@ function Whiteboard() {
         onToggle3D={() => setIs3DEnabled(!is3DEnabled)}
         isSketchMode={isSketchMode}
         onToggleSketch={() => setIsSketchMode(!isSketchMode)}
+      />
+
+      <HistoryScrubber 
+        undoManager={undoManagerRef.current}
+        canUndo={canUndo}
+        canRedo={canRedo}
+      />
+
+      <CodeExportPanel 
+        isOpen={isCodeExportOpen}
+        onClose={() => setIsCodeExportOpen(false)}
+        selectedShapes={selectedId ? [shapes[selectedId]].filter(Boolean) : []}
       />
      </div>
     </div>
