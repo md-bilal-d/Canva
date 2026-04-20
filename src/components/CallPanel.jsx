@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Video, VideoOff, PhoneOff, AlertCircle } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, PhoneOff, AlertCircle, StickyNote, Loader2 } from 'lucide-react';
 import useWebRTC from '../hooks/useWebRTC';
+import * as Y from 'yjs';
 
 // Video Component for each tile
 const VideoTile = ({ stream, isLocal = false, muted = false, name = "User" }) => {
@@ -102,7 +103,7 @@ const VideoTile = ({ stream, isLocal = false, muted = false, name = "User" }) =>
   );
 };
 
-export default function CallPanel({ isOpen, onClose, socket, roomId, currentUser }) {
+export default function CallPanel({ isOpen, onClose, socket, roomId, currentUser, ydoc }) {
   const {
     localStream,
     remoteStreams,
@@ -113,6 +114,68 @@ export default function CallPanel({ isOpen, onClose, socket, roomId, currentUser
     toggleCamera,
     leaveCall
   } = useWebRTC(socket, roomId, isOpen, currentUser);
+
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const recognitionRef = useRef(null);
+
+  useEffect(() => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      console.warn("Speech recognition not supported in this browser.");
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[event.results.length - 1][0].transcript;
+      if (transcript.trim() && ydoc) {
+        const id = 'note-voice-' + Date.now();
+        const yNotes = ydoc.getMap('stickyNotes');
+        ydoc.transact(() => {
+          const noteMap = new Y.Map();
+          noteMap.set('id', id);
+          // Random offset near center
+          noteMap.set('x', (arguments[0].viewportCenter?.x || 0) + (Math.random() - 0.5) * 200);
+          noteMap.set('y', (arguments[0].viewportCenter?.y || 0) + (Math.random() - 0.5) * 200);
+          noteMap.set('backgroundColor', '#fbcfe8'); // Pink for voice notes
+          const yText = new Y.Text();
+          yText.insert(0, transcript.trim());
+          noteMap.set('textContent', yText);
+          yNotes.set(id, noteMap);
+        }, 'local');
+      }
+    };
+
+    recognition.onerror = (event) => {
+        console.error("Speech Recognition Error:", event.error);
+        setIsTranscribing(false);
+    };
+
+    recognition.onend = () => {
+        if (isTranscribing) recognition.start(); // Keep listening if toggle is on
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+        if (recognitionRef.current) recognitionRef.current.stop();
+    };
+  }, [ydoc, isTranscribing]);
+
+  const toggleTranscription = () => {
+    if (!recognitionRef.current) return;
+    const nextState = !isTranscribing;
+    setIsTranscribing(nextState);
+    if (nextState) {
+        recognitionRef.current.start();
+    } else {
+        recognitionRef.current.stop();
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -196,6 +259,16 @@ export default function CallPanel({ isOpen, onClose, socket, roomId, currentUser
           title="Leave Call"
         >
           <PhoneOff size={20} />
+        </button>
+
+        <button
+          onClick={toggleTranscription}
+          className={`p-3 rounded-full flex items-center justify-center transition-all ${
+            isTranscribing ? 'bg-pink-100 text-pink-600 ring-2 ring-pink-400' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+          }`}
+          title={isTranscribing ? "Stop Dictation" : "Dictate to Board"}
+        >
+          {isTranscribing ? <Loader2 size={20} className="animate-spin" /> : <StickyNote size={20} />}
         </button>
       </div>
     </div>

@@ -3,7 +3,8 @@
 // ============================================================
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { X, BarChart3, Check, Eye, EyeOff } from 'lucide-react';
+import { X, BarChart3, Check, EyeOff, Loader2, Trophy } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 function PollCreationModal({ onClose, onCreate }) {
   const [question, setQuestion] = useState('');
@@ -35,112 +36,91 @@ function PollCreationModal({ onClose, onCreate }) {
   };
 
   return (
-    <div
-      style={{
-        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-        background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)',
-        zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: "'Inter', sans-serif",
-      }}
-      onClick={onClose}
-    >
-      <form
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10000] flex items-center justify-center p-4" onClick={onClose}>
+      <motion.form
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
         onSubmit={handleCreate}
-        style={{
-          width: '400px', background: 'white', borderRadius: '16px',
-          boxShadow: '0 16px 48px rgba(0,0,0,0.2)', padding: '24px',
-          display: 'flex', flexDirection: 'column', gap: '16px',
-          animation: 'modalIn 0.2s ease',
-        }}
+        className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 flex flex-col gap-4 border border-indigo-50"
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>Create Poll</h3>
-          <button type="button" onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#94a3b8' }}>
-            <X size={18} />
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <BarChart3 size={20} className="text-indigo-600" />
+            Create Poll
+          </h3>
+          <button type="button" onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-full text-gray-400 transition-colors">
+            <X size={20} />
           </button>
         </div>
 
-        <input
-          autoFocus
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="What's your question?"
-          style={{
-            padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '10px',
-            fontSize: '14px', outline: 'none', fontFamily: "'Inter', sans-serif",
-          }}
-        />
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Question</label>
+          <input
+            autoFocus
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="What's your question?"
+            className="w-full p-3 bg-indigo-50/30 border border-indigo-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner"
+          />
+        </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <label style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Options</label>
-          {options.map((opt, i) => (
-            <input
-              key={i}
-              value={opt}
-              onChange={(e) => updateOption(i, e.target.value)}
-              placeholder={`Option ${i + 1}`}
-              style={{
-                padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '8px',
-                fontSize: '13px', outline: 'none', fontFamily: "'Inter', sans-serif",
-              }}
-            />
-          ))}
+        <div className="flex flex-col gap-2">
+          <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Options</label>
+          <div className="flex flex-col gap-2">
+              {options.map((opt, i) => (
+                <input
+                  key={i}
+                  value={opt}
+                  onChange={(e) => updateOption(i, e.target.value)}
+                  placeholder={`Option ${i + 1}`}
+                  className="w-full p-2.5 bg-gray-50 border border-gray-100 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                />
+              ))}
+          </div>
           {options.length < 6 && (
             <button
               type="button"
               onClick={addOption}
-              style={{
-                padding: '6px', border: '1px dashed #d1d5db', borderRadius: '8px',
-                background: 'transparent', color: '#94a3b8', cursor: 'pointer',
-                fontSize: '12px', fontWeight: 500,
-              }}
+              className="text-[11px] font-bold text-indigo-500 hover:text-indigo-600 transition flex items-center gap-1 mt-1"
             >
-              + Add Option
+              + Add another option
             </button>
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <div style={{ flex: 1 }}>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Timer (min)</label>
-            <input
-              type="number"
-              value={timerMinutes}
-              onChange={(e) => setTimerMinutes(e.target.value)}
-              placeholder="Optional"
-              min={1}
-              max={60}
-              style={{
-                display: 'block', width: '100%', marginTop: '4px',
-                padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '8px',
-                fontSize: '13px', outline: 'none',
-              }}
-            />
-          </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', marginTop: '18px' }}>
-            <input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} />
-            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}>Anonymous</span>
-          </label>
+        <div className="grid grid-cols-2 gap-4 pt-2">
+           <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Duration (min)</label>
+                <input
+                    type="number"
+                    value={timerMinutes}
+                    onChange={(e) => setTimerMinutes(e.target.value)}
+                    placeholder="None"
+                    className="w-full p-2 bg-gray-50 border border-gray-100 rounded-lg text-sm focus:outline-none"
+                />
+           </div>
+           <div className="flex items-end pb-1">
+                <label className="flex items-center gap-2 cursor-pointer group">
+                    <input 
+                        type="checkbox" 
+                        checked={anonymous} 
+                        onChange={(e) => setAnonymous(e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-xs font-semibold text-gray-600 group-hover:text-gray-900 transition-colors">Anonymous</span>
+                </label>
+           </div>
         </div>
 
         <button
           type="submit"
-          style={{
-            padding: '10px', border: 'none', borderRadius: '10px',
-            background: '#6366f1', color: 'white', fontWeight: 600,
-            fontSize: '14px', cursor: 'pointer',
-          }}
+          className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 hover:shadow-indigo-200 transition-all flex items-center justify-center gap-2 mt-2"
         >
-          Create Poll
+          Launch Poll
         </button>
-      </form>
-      <style>{`
-        @keyframes modalIn {
-          from { opacity: 0; transform: scale(0.96) translateY(8px); }
-          to { opacity: 1; transform: scale(1) translateY(0); }
-        }
-      `}</style>
+      </motion.form>
     </div>
   );
 }
@@ -148,178 +128,116 @@ function PollCreationModal({ onClose, onCreate }) {
 export default function PollWidget({
   poll,
   currentUserId,
-  totalUsers = 1,
   onVote,
   onClose,
-  onDelete,
-  getVoteCount,
   getTotalVotes,
+  getVoteCount
 }) {
-  const [position, setPosition] = useState({ x: poll?.x || 200, y: poll?.y || 200 });
-  const dragStartRef = useRef(null);
-
-  const handleDragStart = useCallback((e) => {
-    dragStartRef.current = {
-      x: e.clientX - position.x,
-      y: e.clientY - position.y,
-    };
-    const handleDrag = (e) => {
-      setPosition({
-        x: e.clientX - dragStartRef.current.x,
-        y: e.clientY - dragStartRef.current.y,
-      });
-    };
-    const handleDragEnd = () => {
-      window.removeEventListener('mousemove', handleDrag);
-      window.removeEventListener('mouseup', handleDragEnd);
-    };
-    window.addEventListener('mousemove', handleDrag);
-    window.addEventListener('mouseup', handleDragEnd);
-  }, [position]);
-
   if (!poll) return null;
 
   const totalVotes = getTotalVotes?.(poll) || 0;
   const userVote = poll.votes?.[currentUserId];
   const isClosed = poll.closed;
 
-  // Find winning option
-  let winnerOptId = null;
+  // Find winner
+  let winnerId = null;
   if (isClosed && poll.options?.length > 0) {
-    let max = 0;
-    poll.options.forEach((opt) => {
-      const count = getVoteCount?.(poll, opt.id) || 0;
-      if (count > max) {
-        max = count;
-        winnerOptId = opt.id;
-      }
+    let max = -1;
+    poll.options.forEach(opt => {
+        const count = getVoteCount?.(poll, opt.id) || 0;
+        if (count > max) {
+            max = count;
+            winnerId = opt.id;
+        }
     });
   }
 
-  // Auto-close check
-  const [timeLeft, setTimeLeft] = useState(null);
-  useEffect(() => {
-    if (!poll.endsAt || isClosed) return;
-    const interval = setInterval(() => {
-      const rem = Math.max(0, poll.endsAt - Date.now());
-      setTimeLeft(rem);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [poll.endsAt, isClosed]);
-
   return (
-    <div
-      style={{
-        position: 'fixed',
-        left: position.x,
-        top: position.y,
-        zIndex: 8000,
-        width: '300px',
-        background: 'white',
-        borderRadius: '16px',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
-        border: '1px solid #e2e8f0',
-        fontFamily: "'Inter', sans-serif",
-        overflow: 'hidden',
-      }}
+    <motion.div
+      drag
+      dragMomentum={false}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="fixed z-[8000] w-[320px] glass-panel rounded-2xl overflow-hidden cursor-grab active:cursor-grabbing"
+      style={{ left: poll.x || 200, top: poll.y || 200 }}
     >
       {/* Header */}
-      <div
-        onMouseDown={handleDragStart}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '12px 16px', background: '#fafbfc', borderBottom: '1px solid #f1f5f9',
-          cursor: 'grab', userSelect: 'none',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <BarChart3 size={16} color="#6366f1" />
-          <span style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>Poll</span>
-          {poll.anonymous && <EyeOff size={12} color="#94a3b8" title="Anonymous" />}
+      <div className="px-4 py-3 border-b border-gray-200/50 flex justify-between items-center bg-white/40">
+        <div className="flex items-center gap-2">
+            <BarChart3 size={16} className="text-indigo-600" />
+            <span className="text-[12px] font-bold text-gray-800 uppercase tracking-wider">Board Poll</span>
+            {poll.anonymous && <EyeOff size={12} className="text-gray-400" />}
         </div>
-        <button onClick={onClose} style={{ border: 'none', background: 'transparent', color: '#94a3b8', cursor: 'pointer' }}>
-          <X size={16} />
+        <button onClick={onClose} className="p-1 hover:bg-black/5 rounded-full text-gray-400 transition-colors">
+            <X size={16} />
         </button>
       </div>
 
-      {/* Question */}
-      <div style={{ padding: '14px 16px 8px' }}>
-        <p style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', margin: 0, lineHeight: 1.4 }}>
-          {poll.question}
-        </p>
-        {timeLeft !== null && !isClosed && (
-          <span style={{ fontSize: '11px', color: '#f59e0b', fontWeight: 500 }}>
-            ⏰ {Math.ceil(timeLeft / 1000)}s remaining
-          </span>
-        )}
-      </div>
+      {/* Body */}
+      <div className="p-4 flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+             <h4 className="text-sm font-bold text-gray-900 leading-tight">{poll.question}</h4>
+             {isClosed && <span className="text-[10px] font-bold text-green-600 uppercase flex items-center gap-1"><Check size={10} /> Final Results</span>}
+          </div>
 
-      {/* Options */}
-      <div style={{ padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        {(poll.options || []).map((opt) => {
-          const count = getVoteCount?.(poll, opt.id) || 0;
-          const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
-          const isSelected = userVote === opt.id;
-          const isWinner = isClosed && opt.id === winnerOptId;
+          <div className="flex flex-col gap-2">
+            {poll.options.map((opt) => {
+                const count = getVoteCount?.(poll, opt.id) || 0;
+                const pct = totalVotes > 0 ? (count / totalVotes) * 100 : 0;
+                const isSelected = userVote === opt.id;
+                const isWinner = isClosed && opt.id === winnerId;
 
-          return (
-            <button
-              key={opt.id}
-              onClick={() => !isClosed && onVote?.(poll.id, opt.id)}
-              disabled={isClosed}
-              style={{
-                position: 'relative',
-                padding: '10px 14px',
-                border: `1.5px solid ${isSelected ? '#6366f1' : isWinner ? '#22c55e' : '#e2e8f0'}`,
-                borderRadius: '10px',
-                background: 'transparent',
-                cursor: isClosed ? 'default' : 'pointer',
-                textAlign: 'left',
-                overflow: 'hidden',
-                transition: 'all 0.15s ease',
-                fontFamily: "'Inter', sans-serif",
-              }}
-            >
-              {/* Progress bar background */}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  bottom: 0,
-                  width: `${pct}%`,
-                  background: isWinner ? 'rgba(34,197,94,0.12)' : isSelected ? 'rgba(99,102,241,0.08)' : 'rgba(0,0,0,0.03)',
-                  transition: 'width 0.3s ease',
-                  borderRadius: '8px',
-                }}
-              />
-              <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {isSelected && <Check size={13} color="#6366f1" />}
-                  <span style={{ fontSize: '13px', fontWeight: isSelected ? 600 : 400, color: '#0f172a' }}>
-                    {opt.text}
-                  </span>
-                </div>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: isWinner ? '#22c55e' : '#94a3b8' }}>
-                  {pct}%
-                </span>
-              </div>
-            </button>
-          );
-        })}
+                return (
+                    <motion.button
+                        key={opt.id}
+                        whileHover={!isClosed ? { scale: 1.02 } : {}}
+                        whileTap={!isClosed ? { scale: 0.98 } : {}}
+                        onClick={() => !isClosed && onVote?.(poll.id, opt.id)}
+                        disabled={isClosed}
+                        className={`relative w-full p-3 rounded-xl border transition-all text-left group overflow-hidden ${
+                            isSelected ? 'border-indigo-500 bg-indigo-50/20' : 
+                            isWinner ? 'border-green-500 bg-green-50/20' :
+                            'border-gray-100 hover:border-gray-200 bg-gray-50/30'
+                        }`}
+                    >
+                        {/* Dynamic Progress Bar */}
+                        <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${pct}%` }}
+                            transition={{ duration: 1, ease: "easeOut" }}
+                            className={`absolute inset-y-0 left-0 opacity-10 ${
+                                isWinner ? 'bg-green-500' : isSelected ? 'bg-indigo-500' : 'bg-gray-400'
+                            }`}
+                        />
+
+                        <div className="relative flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                                {isSelected && <Check size={14} className="text-indigo-600" />}
+                                {isWinner && <Trophy size={14} className="text-green-600" />}
+                                <span className={`text-xs font-semibold ${isSelected ? 'text-indigo-700' : isWinner ? 'text-green-700' : 'text-gray-700'}`}>
+                                    {opt.text}
+                                </span>
+                            </div>
+                            <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-600">
+                                {Math.round(pct)}%
+                            </span>
+                        </div>
+                    </motion.button>
+                );
+            })}
+          </div>
       </div>
 
       {/* Footer */}
-      <div style={{ padding: '0 16px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-          {totalVotes} vote{totalVotes !== 1 ? 's' : ''}
-        </span>
-        {isClosed && (
-          <span style={{ fontSize: '11px', color: '#22c55e', fontWeight: 600 }}>✓ Closed</span>
-        )}
+      <div className="px-4 py-2.5 bg-white/40 border-t border-gray-200/50 flex justify-between items-center">
+         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">
+            {totalVotes} Total Votes
+         </span>
+         {!isClosed && <div className="flex items-center gap-1 text-[10px] text-indigo-500 font-bold"><Loader2 size={10} className="animate-spin" /> Live</div>}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
 export { PollCreationModal };
+al };

@@ -20,7 +20,7 @@ import {
   Pencil, Square, CircleIcon, Trash2,
   Undo2, Redo2, RotateCcw, MousePointer2,
   Minus, Plus, Palette, Link, Check, StickyNote, X, Download,
-  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter
+  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code
 } from 'lucide-react';
 import useConnectors, { computeConnectorPoints, getShapeEdgePoints } from './hooks/useConnectors.js';
 import CallPanel from './components/CallPanel.jsx';
@@ -31,6 +31,10 @@ import CursorChat from './components/CursorChat.jsx';
 import CanvasImage from './components/CanvasImage.jsx';
 import HistoryScrubber from './components/HistoryScrubber.jsx';
 import CodeExportPanel from './components/CodeExportPanel.jsx';
+import Minimap from './components/Minimap.jsx';
+import PhysicsWorld from './components/PhysicsWorld.jsx';
+import ActivityHeatmap from './components/ActivityHeatmap.jsx';
+import { motion, AnimatePresence } from 'framer-motion';
 import './index.css';
 
 // --- Server URL ---
@@ -211,9 +215,14 @@ function Whiteboard() {
   const [isAIOpen, setIsAIOpen] = useState(false);
   const [isScenesOpen, setIsScenesOpen] = useState(false);
   const [activeEmoji, setActiveEmoji] = useState(null);
-  const [is3DEnabled, setIs3DEnabled] = useState(true);
+  const [is3DEnabled, setIs3DEnabled] = useState(false);
+  const [isPhysicsEnabled, setIsPhysicsEnabled] = useState(false);
+  const [isHeatmapEnabled, setIsHeatmapEnabled] = useState(false);
   const [isSketchMode, setIsSketchMode] = useState(false);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  
+  // Ref to track throttled physics updates
+  const lastPhysicsSyncRef = useRef(0);
   
   // Phase 1 Features State
   const [isChatting, setIsChatting] = useState(false);
@@ -252,6 +261,14 @@ function Whiteboard() {
         if (socketRef.current?.connected) {
            const stage = stageRef.current;
            const pos = stage ? stage.getRelativePointerPosition() : null;
+           socketRef.current.emit('awareness-update', {
+             clientId: 'local',
+             cursor: {
+               x: pos?.x || 0,
+               y: pos?.y || 0,
+               name: currentUser.name,
+               color: currentUser.color,
+             },
              emojiReaction: field === 'emojiReaction' ? value : state.emojiReaction,
              chatText: field === 'chatText' ? value : state.chatText,
              viewport: field === 'viewport' ? value : state.viewport,
@@ -968,6 +985,7 @@ function Whiteboard() {
     return () => cancelAnimationFrame(frameId);
   }, [shapes]);
 
+
   const handleClear = useCallback(() => {
     const ydoc = ydocRef.current;
     const yShapes = yShapesRef.current;
@@ -1173,43 +1191,6 @@ function Whiteboard() {
     ));
   };
 
-  const handleTransitionTo = useCallback((scene) => {
-    // Basic transition loop for scenes
-    // We must read the latest state values using refs or functional sets, 
-    // but functional updates with inside requestAnimationFrame are tricky. 
-    // Using current state at the start is fine for one-off animations.
-    
-    // To ensure fresh start values, we use state setter closures
-    let startTime = null;
-    const duration = 800; // ms
-
-    setStagePos(startPos => {
-        setStageScale(startScale => {
-            const animate = (time) => {
-              if (!startTime) startTime = time;
-              let progress = (time - startTime) / duration;
-              if (progress > 1) progress = 1;
-              
-              // easeInOutCubic
-              const ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-
-              setStagePos({
-                x: startPos.x + (scene.x - startPos.x) * ease,
-                y: startPos.y + (scene.y - startPos.y) * ease
-              });
-              setStageScale(startScale + (scene.scale - startScale) * ease);
-
-              if (progress < 1) {
-                requestAnimationFrame(animate);
-              }
-            };
-            requestAnimationFrame(animate);
-            return startScale; // No immediate update, rely on rAF
-        });
-        return startPos; // No immediate update, rely on rAF
-    });
-  }, []);
-
   const renderedShapes = useMemo(() => {
     return Object.entries(shapes).map(([id, shape]) => {
       if (!shape) return null;
@@ -1381,6 +1362,57 @@ function Whiteboard() {
     });
   }, [shapes, tool, selectedId, handleShapeDragEnd]);
 
+  const handlePhysicsUpdate = useCallback((engineData) => {
+    // Throttled sync to avoid Yjs overhead
+    const now = Date.now();
+    if (now - lastPhysicsSyncRef.current < 33) return; // ~30fps sync
+    lastPhysicsSyncRef.current = now;
+
+    // Direct state updates for Konva performance
+    const { items } = engineData;
+    activeDoc.transact(() => {
+      items.forEach(item => {
+        if (item.type === 'shape' && yShapesRef.current?.has(item.id)) {
+           const shape = yShapesRef.current.get(item.id);
+           shape.set('x', item.x);
+           shape.set('y', item.y);
+           shape.set('rotation', item.angle * (180 / Math.PI));
+        } else if (item.type === 'note' && yNotesRef.current?.has(item.id)) {
+           const note = yNotesRef.current.get(item.id);
+           note.set('x', item.x);
+           note.set('y', item.y);
+        }
+      });
+    });
+  }, [activeDoc]);
+
+  const handleTransitionTo = useCallback((scene) => {
+    const startX = stagePos.x;
+    const startY = stagePos.y;
+    const startScale = stageScale;
+    const targetX = scene.x;
+    const targetY = scene.y;
+    const targetScale = scene.scale;
+
+    let startTime = null;
+    const duration = 1000;
+
+    const animate = (time) => {
+      if (!startTime) startTime = time;
+      const progress = Math.min((time - startTime) / duration, 1);
+      const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+      setStagePos({
+        x: startX + (targetX - startX) * eased,
+        y: startY + (targetY - startY) * eased
+      });
+      setStageScale(startScale + (targetScale - startScale) * eased);
+
+      if (progress < 1) requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+  }, [stagePos, stageScale]);
+
   const zoomPercent = Math.round(stageScale * 100);
 
   return (
@@ -1398,25 +1430,50 @@ function Whiteboard() {
       >
       {currentUser.isGuest && <GuestBanner />}
       
-      <AISidebar 
-        isOpen={isAIOpen}
-        onClose={() => setIsAIOpen(false)}
-        ydoc={activeDoc}
-        viewportCenter={{ 
-          x: (-stagePos.x + window.innerWidth / 2) / stageScale,
-          y: (-stagePos.y + window.innerHeight / 2) / stageScale 
-        }}
-        stageScale={stageScale}
-      />
+      <AnimatePresence>
+        {isAIOpen && (
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed top-6 right-6 z-[1001]"
+          >
+            <AISidebar 
+              isOpen={isAIOpen}
+              onClose={() => setIsAIOpen(false)}
+              ydoc={activeDoc}
+              viewportCenter={{ 
+                x: (-stagePos.x + window.innerWidth / 2) / stageScale,
+                y: (-stagePos.y + window.innerHeight / 2) / stageScale 
+              }}
+              stageScale={stageScale}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <ScenePanel
-        isOpen={isScenesOpen}
-        onClose={() => setIsScenesOpen(false)}
-        ydoc={activeDoc}
-        stagePos={stagePos}
-        stageScale={stageScale}
-        onTransitionTo={handleTransitionTo}
-      />
+      <AnimatePresence>
+        {isScenesOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed inset-0 pointer-events-none z-[1002] flex items-center justify-center"
+          >
+            <div className="pointer-events-auto">
+              <ScenePanel
+                isOpen={isScenesOpen}
+                onClose={() => setIsScenesOpen(false)}
+                ydoc={activeDoc}
+                stagePos={stagePos}
+                stageScale={stageScale}
+                onTransitionTo={handleTransitionTo}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <TemplatesModal 
         isOpen={isTemplatesOpen} 
@@ -1456,6 +1513,20 @@ function Whiteboard() {
             title="Toggle 3D View"
           >
             <Box size={18} className={is3DEnabled ? "text-indigo-400" : ""} />
+          </button>
+          <button 
+            className={`tool-btn ${isPhysicsEnabled ? 'active' : ''}`}
+            onClick={() => setIsPhysicsEnabled(!isPhysicsEnabled)}
+            title="Toggle Physics Engine"
+          >
+            <Zap size={18} className={isPhysicsEnabled ? 'text-yellow-400' : ''} />
+          </button>
+          <button 
+            className={`tool-btn ${isHeatmapEnabled ? 'active' : ''}`}
+            onClick={() => setIsHeatmapEnabled(!isHeatmapEnabled)}
+            title="Toggle Activity Heatmap"
+          >
+            <Sparkles size={18} className={isHeatmapEnabled ? 'text-orange-400' : ''} />
           </button>
           <button 
             className={`tool-btn ${isSketchMode ? 'active' : ''}`} 
@@ -1607,6 +1678,11 @@ function Whiteboard() {
         socket={socketRef.current}
         roomId={roomId}
         currentUser={currentUser}
+        ydoc={activeDoc}
+        viewportCenter={{ 
+          x: (-stagePos.x + window.innerWidth / 2) / stageScale,
+          y: (-stagePos.y + window.innerHeight / 2) / stageScale 
+        }}
       />
 
       {incomingCall && !isCallOpen && (
@@ -1644,6 +1720,50 @@ function Whiteboard() {
         <button className="zoom-btn" onClick={() => setStageScale(s => Math.min(5, s * 1.15))}><Plus size={14} /></button>
         <button className="zoom-btn" onClick={resetView} title="Reset View"><RotateCcw size={13} /></button>
       </div>
+
+      <Minimap 
+        shapes={shapes}
+        stickyNotes={stickyNotes}
+        stagePos={stagePos}
+        stageScale={stageScale}
+        onNavigate={(pos) => updateViewportPos(pos)}
+      />
+
+      <PhysicsWorld 
+        shapes={shapes}
+        stickyNotes={stickyNotes}
+        isEnabled={isPhysicsEnabled}
+        onUpdate={handlePhysicsUpdate}
+      />
+
+      <ActivityHeatmap 
+        isOpen={isHeatmapEnabled}
+        cursors={remoteCursors}
+        stagePos={stagePos}
+        stageScale={stageScale}
+      />
+
+      <ScenePanel 
+        isOpen={isScenesOpen}
+        onClose={() => setIsScenesOpen(false)}
+        ydoc={activeDoc}
+        stagePos={stagePos}
+        stageScale={stageScale}
+        onTransitionTo={handleTransitionTo}
+      />
+
+      <div 
+        className={`canvas-depth-wrapper ${is3DEnabled ? 'depth-active' : ''}`}
+        style={{
+          perspective: '1500px',
+          width: '100vw',
+          height: '100vh',
+          transform: is3DEnabled 
+            ? `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)` 
+            : 'none',
+          transition: isPanning ? 'none' : 'transform 0.1s ease-out'
+        }}
+      >
 
       <Stage
         ref={stageRef}
@@ -1788,6 +1908,7 @@ function Whiteboard() {
         </Layer>
 
       </Stage>
+      </div>
       
       {/* Overlay for Floating Emojis (Screen Space, but coordinate-offset for canvas sync) */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 9999 }}>
@@ -1910,6 +2031,72 @@ function Whiteboard() {
      </div>
     </div>
   );
+}
+
+function MobileToolbar({ 
+    tool, color, onToolChange, onColorChange, onUndo, onClear, 
+    is3DEnabled, onToggle3D, isSketchMode, onToggleSketch 
+}) {
+    return (
+        <div className="mobile-toolbar-wrapper md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-[2000] flex items-center gap-3 px-6 py-4 bg-white/70 backdrop-blur-xl border border-white/20 rounded-full shadow-2xl transition-all duration-300 hover:bg-white/80">
+            <button 
+                onClick={() => onToolChange('pen')}
+                className={`p-2.5 rounded-full transition-all ${tool === 'pen' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+                <Pencil size={20} />
+            </button>
+            <button 
+                onClick={() => onToolChange('rect')}
+                className={`p-2.5 rounded-full transition-all ${tool === 'rect' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+                <Square size={20} />
+            </button>
+            <button 
+                onClick={() => onToolChange('circle')}
+                className={`p-2.5 rounded-full transition-all ${tool === 'circle' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+                <CircleIcon size={20} />
+            </button>
+            
+            <div className="w-[1px] h-6 bg-slate-200/50" />
+            
+            <button 
+                onClick={onToggle3D}
+                className={`p-2.5 rounded-full transition-all ${is3DEnabled ? 'bg-amber-100 text-amber-600 shadow-inner' : 'text-slate-400 hover:bg-slate-100'}`}
+            >
+                <Box size={20} />
+            </button>
+            
+            <button 
+                onClick={onToggleSketch}
+                className={`p-2.5 rounded-full transition-all ${isSketchMode ? 'bg-pink-100 text-pink-600 shadow-inner' : 'text-slate-400 hover:bg-slate-100'}`}
+            >
+                <Highlighter size={20} />
+            </button>
+            
+            <div className="w-[1px] h-6 bg-slate-200/50" />
+
+            <button 
+                onClick={onUndo}
+                className="p-2.5 rounded-full text-slate-600 hover:bg-slate-100 transition-all"
+            >
+                <Undo2 size={20} />
+            </button>
+            
+            <div className="relative group">
+                <div 
+                    className="w-8 h-8 rounded-full border-2 border-white shadow-sm cursor-pointer overflow-hidden"
+                    style={{ backgroundColor: color }}
+                />
+                <input 
+                    type="color" 
+                    value={color}
+                    onChange={(e) => onColorChange(e.target.value)}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                />
+            </div>
+        </div>
+    );
 }
 
 export default function App() {

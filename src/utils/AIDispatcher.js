@@ -160,6 +160,50 @@ export function insertDesignFromAI(ydoc, currentViewPos, scale, intent, params) 
           });
           break;
       }
+      case 'summarize': {
+          const shapes = [];
+          yShapes.forEach((val, key) => shapes.push(val));
+          const notes = [];
+          yNotes.forEach((val, key) => notes.push(val.get('textContent').toString()));
+          
+          const summaryId = 'note-' + Date.now() + '-summary';
+          const summaryNote = new window.Y.Map();
+          summaryNote.set('id', summaryId);
+          summaryNote.set('x', centerX - 200);
+          summaryNote.set('y', centerY - 150);
+          summaryNote.set('backgroundColor', '#e0e7ff'); // Indigo background for AI summary
+          const summaryText = new window.Y.Text();
+          
+          let contentStr = `🤖 AI BOARD SUMMARY\n\n`;
+          contentStr += `Elements: ${shapes.length} shapes, ${notes.length} notes.\n`;
+          if (notes.length > 0) {
+              contentStr += `\nKey Notes:\n- ${notes.slice(0, 3).join('\n- ')}`;
+          }
+          contentStr += `\n\nInsights: The board appears to focus on ${params.prompt || 'creative brainstorming'}. Recommended next steps: Detail branch paths and establish priority vectors.`;
+          
+          summaryText.insert(0, contentStr);
+          summaryNote.set('textContent', summaryText);
+          yNotes.set(summaryId, summaryNote);
+          break;
+      }
+      case 'expand': {
+          // Find an image on the board to "expand"
+          let targetId = null;
+          yShapes.forEach((val, key) => {
+              if (val.type === 'image') targetId = key;
+          });
+
+          if (targetId) {
+              const existing = yShapes.get(targetId);
+              yShapes.set(targetId, {
+                  ...existing,
+                  width: existing.width * 1.5,
+                  height: existing.height * 1.5,
+                  prompt: `Expanded: ${params.prompt || existing.prompt}`
+              });
+          }
+          break;
+      }
       default:
         console.warn('Unknown AI intent:', intent);
     }

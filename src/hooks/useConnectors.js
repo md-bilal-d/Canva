@@ -56,57 +56,59 @@ function getEdgePoint(shape, targetX, targetY) {
 }
 
 /**
- * Given two shapes, compute bezier-curve-friendly start and end points
- * plus two control points for a smooth curve.
+ * Computes a smart orthogonal path between two shapes.
+ * Returns an array of points [x1, y1, x2, y2, ...] for a Line or Arrow.
  */
 export function computeConnectorPoints(fromShape, toShape) {
   if (!fromShape || !toShape) return null;
 
-  // Get center points for the "other" shape to determine edge direction
   const fromCenter = getShapeCenter(fromShape);
   const toCenter = getShapeCenter(toShape);
 
+  // 1. Get the best edge points
   const fromPt = getEdgePoint(fromShape, toCenter.x, toCenter.y);
   const toPt = getEdgePoint(toShape, fromCenter.x, fromCenter.y);
 
-  // Compute control points for a nice bezier curve
-  const dx = toPt.x - fromPt.x;
-  const dy = toPt.y - fromPt.y;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  const offset = Math.min(dist * 0.4, 120);
+  // 2. Generate orthogonal path points
+  // We'll use a 3-segment or 5-segment approach
+  const points = [];
+  points.push(fromPt.x, fromPt.y);
 
-  const cp1 = getControlOffset(fromPt, offset);
-  const cp2 = getControlOffset(toPt, offset);
+  const midX = (fromPt.x + toPt.x) / 2;
+  const midY = (fromPt.y + toPt.y) / 2;
+
+  if (fromPt.side === 'left' || fromPt.side === 'right') {
+    // Horizontal exit
+    points.push(midX, fromPt.y);
+    points.push(midX, toPt.y);
+  } else {
+    // Vertical exit
+    points.push(fromPt.x, midY);
+    points.push(toPt.x, midY);
+  }
+
+  points.push(toPt.x, toPt.y);
 
   return {
     from: fromPt,
     to: toPt,
-    cp1,
-    cp2,
-    points: [fromPt.x, fromPt.y, cp1.x, cp1.y, cp2.x, cp2.y, toPt.x, toPt.y],
+    points: points,
+    bezier: false // Switch to straight segments for clean orthogonal look
   };
 }
 
 function getShapeCenter(shape) {
+  const sx = shape.scaleX || 1;
+  const sy = shape.scaleY || 1;
   if (shape.type === 'rect') {
-    const sx = shape.scaleX || 1;
-    const sy = shape.scaleY || 1;
     return {
       x: shape.x + (shape.width * sx) / 2,
       y: shape.y + (shape.height * sy) / 2,
     };
+  } else if (shape.type === 'circle') {
+    return { x: shape.x, y: shape.y };
   }
   return { x: shape.x || 0, y: shape.y || 0 };
-}
-
-function getControlOffset(point, offset) {
-  switch (point.side) {
-    case 'top':    return { x: point.x, y: point.y - offset };
-    case 'bottom': return { x: point.x, y: point.y + offset };
-    case 'left':   return { x: point.x - offset, y: point.y };
-    case 'right':  return { x: point.x + offset, y: point.y };
-    default:       return { x: point.x, y: point.y };
-  }
 }
 
 /**

@@ -7,7 +7,7 @@ window.Y = Y; // Make Y available for AIDispatcher.js to avoid double importing 
 
 export default function AISidebar({ isOpen, onClose, ydoc, viewportCenter, stageScale }) {
   const [prompt, setPrompt] = useState('');
-  const [mode, setMode] = useState('layout'); // 'layout' or 'image'
+  const [mode, setMode] = useState('layout'); // 'layout', 'image', or 'expand'
   const [isGenerating, setIsGenerating] = useState(false);
 
   if (!isOpen) return null;
@@ -78,6 +78,12 @@ export default function AISidebar({ isOpen, onClose, ydoc, viewportCenter, stage
         >
           Magic Image
         </button>
+        <button 
+          onClick={() => setMode('expand')}
+          className={`flex-1 py-3 text-xs font-semibold transition-colors ${mode === 'expand' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+        >
+          Magic Expand
+        </button>
       </div>
 
       {/* Body */}
@@ -85,13 +91,19 @@ export default function AISidebar({ isOpen, onClose, ydoc, viewportCenter, stage
         <p className="text-[11px] text-gray-500 leading-relaxed italic">
           {mode === 'layout' 
             ? "Generate flowcharts, mindmaps, or moodboards from text."
-            : "Describe an image, and I'll generate it directly on the canvas."}
+            : mode === 'image'
+            ? "Describe an image, and I'll generate it directly on the canvas."
+            : "Select an image on the board and describe how to expand it."}
         </p>
 
         <div className="flex flex-col gap-2">
            <textarea
              className="w-full h-24 p-3 rounded-xl bg-indigo-50/30 border border-indigo-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none shadow-inner"
-             placeholder={mode === 'layout' ? "e.g. 'Flowchart for login system'" : "e.g. 'A futuristic city at night, oil painting'"}
+             placeholder={
+               mode === 'layout' ? "e.g. 'Flowchart for login system'" : 
+               mode === 'image' ? "e.g. 'A futuristic city at night, oil painting'" :
+               "e.g. 'Expand the background to include a forest'"
+             }
              value={prompt}
              onChange={(e) => setPrompt(e.target.value)}
            />
@@ -111,8 +123,22 @@ export default function AISidebar({ isOpen, onClose, ydoc, viewportCenter, stage
         )}
 
         <div className="flex flex-col gap-2 pt-2 border-t border-gray-100">
-            <span className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">Utility Actions</span>
+            <span className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">Premium Utilities</span>
             <div className="grid grid-cols-2 gap-2">
+                <button 
+                  onClick={() => {
+                    setIsGenerating(true);
+                    setTimeout(() => {
+                        insertDesignFromAI(ydoc, viewportCenter, stageScale, 'summarize', {});
+                        setIsGenerating(false);
+                        onClose();
+                    }, 2000);
+                  }}
+                  className="flex items-center gap-2 text-[11px] bg-indigo-50 text-indigo-700 p-2 rounded-xl hover:bg-indigo-100 transition border border-indigo-100 font-bold"
+                >
+                    <TerminalSquare size={14} />
+                    Summarize
+                </button>
                 <button 
                   onClick={() => {
                     insertDesignFromAI(ydoc, viewportCenter, stageScale, 'smartAlign', {});
@@ -120,18 +146,8 @@ export default function AISidebar({ isOpen, onClose, ydoc, viewportCenter, stage
                   }}
                   className="flex items-center gap-2 text-[11px] bg-white text-gray-700 p-2 rounded-xl hover:shadow-md transition border border-gray-100 font-semibold"
                 >
-                    <TerminalSquare size={14} className="text-indigo-500" />
-                    Clean Board
-                </button>
-                <button 
-                  onClick={() => {
-                    insertDesignFromAI(ydoc, viewportCenter, stageScale, 'clusterStickyNotes', {});
-                    onClose();
-                  }}
-                  className="flex items-center gap-2 text-[11px] bg-white text-gray-700 p-2 rounded-xl hover:shadow-md transition border border-gray-100 font-semibold"
-                >
-                    <Sparkles size={14} className="text-purple-500" />
-                    Smart Cluster
+                    <Send size={14} className="text-gray-400" />
+                    Auto Align
                 </button>
             </div>
         </div>
@@ -146,11 +162,12 @@ export default function AISidebar({ isOpen, onClose, ydoc, viewportCenter, stage
         >
           {isGenerating ? (
               <>
-                <Loader2 size={16} className="animate-spin" /> Cooking...
+                <Loader2 size={16} className="animate-spin" /> Thinking...
               </>
           ) : (
               <>
-                <Sparkles size={16} /> {mode === 'layout' ? "Generate Design" : "Create Image"}
+                <Sparkles size={16} /> 
+                {mode === 'layout' ? "Generate Design" : mode === 'image' ? "Create Image" : "Expand Image"}
               </>
           )}
         </button>
