@@ -8,15 +8,7 @@ export const templates = [
     category: 'Kanban',
     color: 'bg-yellow-100',
     shapes: [
-      { type: 'rect', x: 100, y: 100, width: 250, height: 600, color: '#f3f4f6', strokeWidth: 2, label: 'TO DO' },
-      { type: 'rect', x: 110, y: 160, width: 230, height: 80, color: '#ffffff', strokeWidth: 1, label: 'Task 1' },
-      { type: 'rect', x: 110, y: 250, width: 230, height: 80, color: '#ffffff', strokeWidth: 1, label: 'Task 2' },
-      
-      { type: 'rect', x: 375, y: 100, width: 250, height: 600, color: '#f3f4f6', strokeWidth: 2, label: 'IN PROGRESS' },
-      { type: 'rect', x: 385, y: 160, width: 230, height: 80, color: '#ffffff', strokeWidth: 1, label: 'Task 3' },
-      
-      { type: 'rect', x: 650, y: 100, width: 250, height: 600, color: '#f3f4f6', strokeWidth: 2, label: 'DONE' },
-      { type: 'rect', x: 660, y: 160, width: 230, height: 80, color: '#ffffff', strokeWidth: 1, label: 'Task 4' }
+      { type: 'kanban', x: 100, y: 100, width: 800, height: 650, color: '#6366f1' }
     ]
   },
   {

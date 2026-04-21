@@ -56,10 +56,10 @@ function getEdgePoint(shape, targetX, targetY) {
 }
 
 /**
- * Computes a smart orthogonal path between two shapes.
- * Returns an array of points [x1, y1, x2, y2, ...] for a Line or Arrow.
+ * Computes points for a connector between two shapes.
+ * Supports 'bezier' (default) or 'orthogonal' routing.
  */
-export function computeConnectorPoints(fromShape, toShape) {
+export function computeConnectorPoints(fromShape, toShape, routingType = 'bezier') {
   if (!fromShape || !toShape) return null;
 
   const fromCenter = getShapeCenter(fromShape);
@@ -69,32 +69,48 @@ export function computeConnectorPoints(fromShape, toShape) {
   const fromPt = getEdgePoint(fromShape, toCenter.x, toCenter.y);
   const toPt = getEdgePoint(toShape, fromCenter.x, fromCenter.y);
 
-  // 2. Generate orthogonal path points
-  // We'll use a 3-segment or 5-segment approach
-  const points = [];
-  points.push(fromPt.x, fromPt.y);
+  if (routingType === 'orthogonal') {
+    // Generate orthogonal path points (Manhattan routing)
+    const points = [];
+    points.push(fromPt.x, fromPt.y);
 
-  const midX = (fromPt.x + toPt.x) / 2;
-  const midY = (fromPt.y + toPt.y) / 2;
+    const midX = (fromPt.x + toPt.x) / 2;
+    const midY = (fromPt.y + toPt.y) / 2;
 
-  if (fromPt.side === 'left' || fromPt.side === 'right') {
-    // Horizontal exit
-    points.push(midX, fromPt.y);
-    points.push(midX, toPt.y);
+    if (fromPt.side === 'left' || fromPt.side === 'right') {
+      // Horizontal exit
+      points.push(midX, fromPt.y);
+      points.push(midX, toPt.y);
+    } else {
+      // Vertical exit
+      points.push(fromPt.x, midY);
+      points.push(toPt.x, midY);
+    }
+
+    points.push(toPt.x, toPt.y);
+
+    return {
+      from: fromPt,
+      to: toPt,
+      points: points,
+      bezier: false
+    };
   } else {
-    // Vertical exit
-    points.push(fromPt.x, midY);
-    points.push(toPt.x, midY);
+    // Bezier routing
+    const fx = fromPt.x, fy = fromPt.y, tx = toPt.x, ty = toPt.y;
+    // Simple 4-point bezier curve
+    const cp1x = fromPt.side === 'left' ? fx - 100 : fromPt.side === 'right' ? fx + 100 : fx;
+    const cp1y = fromPt.side === 'top' ? fy - 100 : fromPt.side === 'bottom' ? fy + 100 : fy;
+    const cp2x = toPt.side === 'left' ? tx - 100 : toPt.side === 'right' ? tx + 100 : tx;
+    const cp2y = toPt.side === 'top' ? ty - 100 : toPt.side === 'bottom' ? ty + 100 : ty;
+
+    return {
+      from: fromPt,
+      to: toPt,
+      points: [fx, fy, cp1x, cp1y, cp2x, cp2y, tx, ty],
+      bezier: true
+    };
   }
-
-  points.push(toPt.x, toPt.y);
-
-  return {
-    from: fromPt,
-    to: toPt,
-    points: points,
-    bezier: false // Switch to straight segments for clean orthogonal look
-  };
 }
 
 function getShapeCenter(shape) {

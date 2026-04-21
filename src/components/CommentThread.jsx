@@ -3,6 +3,7 @@
 // ============================================================
 
 import React, { useState, useRef, useEffect } from 'react';
+import MentionInput from './MentionInput.jsx';
 
 function timeAgo(timestamp) {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -33,6 +34,7 @@ export default function CommentThread({
   onClose,
   position = { x: 0, y: 0 },
   currentUser,
+  roomMembers = [],
 }) {
   const [text, setText] = useState('');
   const inputRef = useRef(null);
@@ -196,21 +198,12 @@ export default function CommentThread({
             background: '#fafbfc',
           }}
         >
-          <input
-            ref={inputRef}
-            type="text"
+          <MentionInput
             value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Add a comment..."
-            style={{
-              flex: 1,
-              padding: '7px 12px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '8px',
-              fontSize: '13px',
-              outline: 'none',
-              fontFamily: "'Inter', sans-serif",
-            }}
+            onChange={(val) => setText(val)}
+            onSubmit={handleSubmit}
+            roomMembers={roomMembers}
+            placeholder="Add a comment... (use @ to mention)"
           />
           <button
             type="submit"

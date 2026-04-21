@@ -20,7 +20,7 @@ import {
   Pencil, Square, CircleIcon, Trash2,
   Undo2, Redo2, RotateCcw, MousePointer2,
   Minus, Plus, Palette, Link, Check, StickyNote, X, Download,
-  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code
+  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code, Ruler, Grid3X3
 } from 'lucide-react';
 import useConnectors, { computeConnectorPoints, getShapeEdgePoints } from './hooks/useConnectors.js';
 import CallPanel from './components/CallPanel.jsx';
@@ -35,6 +35,14 @@ import Minimap from './components/Minimap.jsx';
 import PhysicsWorld from './components/PhysicsWorld.jsx';
 import ActivityHeatmap from './components/ActivityHeatmap.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
+import DimensionLine from './components/DimensionLine.jsx';
+import CommentIndicator from './components/CommentIndicator.jsx';
+import CommentThread from './components/CommentThread.jsx';
+import KanbanBoard from './components/KanbanBoard.jsx';
+import useComments from './hooks/useComments.js';
+import useMentions from './hooks/useMentions.js';
+import useNotifications from './hooks/useNotifications.js';
+import { Html } from 'react-konva-utils';
 import './index.css';
 
 // --- Server URL ---
@@ -220,7 +228,9 @@ function Whiteboard() {
   const [isHeatmapEnabled, setIsHeatmapEnabled] = useState(false);
   const [isSketchMode, setIsSketchMode] = useState(false);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
-  
+  const [isGridEnabled, setIsGridEnabled] = useState(false);
+  const [isOrthogonalMode, setIsOrthogonalMode] = useState(false);
+  const GRID_SIZE = 25;
   // Ref to track throttled physics updates
   const lastPhysicsSyncRef = useRef(0);
   
@@ -245,6 +255,8 @@ function Whiteboard() {
   }, [currentUserData]);
 
   const stageRef = useRef(null);
+
+  const [activeCommentThread, setActiveCommentThread] = useState(null); // { shapeId, pos }
 
   const providerRef = useRef({
     awareness: {
@@ -331,6 +343,19 @@ function Whiteboard() {
   const { connectors, addConnector, updateConnector, removeConnector, recalculateForShape } = useConnectors(activeDoc);
   const [connectingStart, setConnectingStart] = useState(null);
   const [activeConnector, setActiveConnector] = useState(null);
+
+  // Collaboration Hooks
+  const { 
+    comments: allComments, 
+    addComment, 
+    resolveThread, 
+    deleteComment, 
+    unresolvedShapeIds 
+  } = useComments(activeDoc);
+  
+  const { mentionCount, clearMentions } = useMentions(activeDoc, currentUser.name);
+  const { unreadCount, notifications, markRead, markAllRead } = useNotifications(socketRef.current, currentUser.id);
+
   useEffect(() => {
     document.title = `Whiteboard — ${roomId}`;
   }, [roomId]);
@@ -683,8 +708,15 @@ function Whiteboard() {
   const getRelativePointerPos = useCallback(() => {
     const stage = stageRef.current;
     if (!stage) return null;
-    return stage.getRelativePointerPosition();
-  }, []);
+    const pos = stage.getRelativePointerPosition();
+    if (isGridEnabled) {
+      return {
+        x: Math.round(pos.x / GRID_SIZE) * GRID_SIZE,
+        y: Math.round(pos.y / GRID_SIZE) * GRID_SIZE
+      };
+    }
+    return pos;
+  }, [isGridEnabled]);
 
   const handleMouseDown = useCallback((e) => {
     const pointer = stageRef.current.getPointerPosition();
@@ -745,6 +777,8 @@ function Whiteboard() {
       setCurrentShape({ type: 'rect', x: pos.x, y: pos.y, width: 0, height: 0, color, strokeWidth });
     } else if (tool === 'circle') {
       setCurrentShape({ type: 'circle', x: pos.x, y: pos.y, radiusX: 0, radiusY: 0, color, strokeWidth });
+    } else if (tool === 'dimension') {
+      setCurrentShape({ type: 'dimension', points: [pos.x, pos.y, pos.x, pos.y], color, strokeWidth });
     }
   }, [tool, color, strokeWidth, spaceHeld, stagePos, getRelativePointerPos]);
 
@@ -848,6 +882,12 @@ function Whiteboard() {
         radiusX: Math.abs(pos.x - start.x) / 2,
         radiusY: Math.abs(pos.y - start.y) / 2,
       }));
+    } else if (tool === 'dimension') {
+      const start = drawStartRef.current;
+      setCurrentShape(prev => ({
+        ...prev,
+        points: [start.x, start.y, pos.x, pos.y],
+      }));
     }
   }, [isDrawing, isPanning, currentShape, tool, broadcastCursor, getRelativePointerPos]);
 
@@ -864,7 +904,8 @@ function Whiteboard() {
         addConnector({
           fromShapeId: connectingStart.shapeId,
           toShapeId: activeConnector.toShapeId,
-          color
+          color,
+          routingType: isOrthogonalMode ? 'orthogonal' : 'bezier'
         });
         setTimeout(() => recalculateForShape(activeConnector.toShapeId, shapes), 50);
         setTool('select');
@@ -1174,11 +1215,11 @@ function Whiteboard() {
         onPointerUp={(e) => {
            if (connectingStart && connectingStart.shapeId !== shape.id) {
                e.cancelBubble = true;
-               // Get shape centers to determine control points natively
                addConnector({
                    fromShapeId: connectingStart.shapeId,
                    toShapeId: shape.id,
-                   color
+                   color,
+                   routingType: isOrthogonalMode ? 'orthogonal' : 'bezier'
                });
                // Force recalculation for the newly added connector
                setTimeout(() => recalculateForShape(shape.id, shapes), 50);
@@ -1357,10 +1398,32 @@ function Whiteboard() {
               strokeWidth={0} // Text should use fill for color, not stroke
             />
           );
+        case 'dimension':
+          return (
+            <DimensionLine
+              key={id}
+              {...commonProps}
+              points={shape.points}
+              scaleFactor={1}
+              unit="cm"
+            />
+          );
+        case 'kanban':
+          return (
+            <Group key={id} {...commonProps}>
+              <Html>
+                <KanbanBoard 
+                  ydoc={activeDoc} 
+                  currentUser={currentUser} 
+                  roomMembers={stackUsers}
+                />
+              </Html>
+            </Group>
+          );
         default: return null;
       }
     });
-  }, [shapes, tool, selectedId, handleShapeDragEnd]);
+  }, [shapes, tool, selectedId, handleShapeDragEnd, activeDoc, currentUser, stackUsers]);
 
   const handlePhysicsUpdate = useCallback((engineData) => {
     // Throttled sync to avoid Yjs overhead
@@ -1503,10 +1566,24 @@ function Whiteboard() {
           <button className={`tool-btn ${tool === 'note' ? 'active' : ''}`} onClick={() => { setTool('note'); setActiveEmoji(null); }} title="Sticky Note">
             <StickyNote size={18} />
           </button>
-          <button className={`tool-btn ${tool === 'connector' ? 'active' : ''}`} onClick={() => { setTool('connector'); setActiveEmoji(null); }} title="Connector Line">
-            <GitCommit size={18} />
+          <button 
+            className={`tool-btn ${isOrthogonalMode ? 'active' : ''}`}
+            onClick={() => setIsOrthogonalMode(!isOrthogonalMode)} 
+            title="Toggle Orthogonal Connectors"
+          >
+            <GitCommit size={18} className={isOrthogonalMode ? "text-indigo-400 rotate-90" : ""} />
+          </button>
+          <button className={`tool-btn ${tool === 'dimension' ? 'active' : ''}`} onClick={() => { setTool('dimension'); setActiveEmoji(null); }} title="Dimension Tool">
+            <Ruler size={18} />
           </button>
           <div className="toolbar-divider" />
+          <button 
+            className={`tool-btn ${isGridEnabled ? 'active' : ''}`} 
+            onClick={() => setIsGridEnabled(!isGridEnabled)} 
+            title="Toggle Grid Snapping"
+          >
+            <Grid3X3 size={18} className={isGridEnabled ? "text-indigo-400" : ""} />
+          </button>
           <button 
             className={`tool-btn ${is3DEnabled ? 'active' : ''}`} 
             onClick={() => setIs3DEnabled(!is3DEnabled)} 
@@ -1798,17 +1875,19 @@ function Whiteboard() {
         <Layer name="static-shapes-layer">
           {Object.entries(connectors).map(([id, conn]) => {
             if (!conn.fromPoint || !conn.toPoint) return null;
-            // Calculate a simple bezier curve without shape info if missing
-            const fx = conn.fromPoint.x, fy = conn.fromPoint.y, tx = conn.toPoint.x, ty = conn.toPoint.y;
-            const pts = [fx, fy, fx + (tx - fx)/2, fy, tx - (tx - fx)/2, ty, tx, ty];
+            const fromShape = shapes[conn.fromShapeId];
+            const toShape = shapes[conn.toShapeId];
+            if (!fromShape || !toShape) return null;
+
+            const pts = computeConnectorPoints(fromShape, toShape, conn.routingType || 'bezier');
             
             return (
               <Group key={id}>
                 <Line
-                  points={pts}
+                  points={pts.points}
                   stroke={conn.color}
                   strokeWidth={3}
-                  bezier={true}
+                  bezier={pts.bezier}
                   hitStrokeWidth={10}
                   onDblClick={() => {
                     if (tool === 'select') removeConnector(id);
@@ -1893,7 +1972,9 @@ function Whiteboard() {
           {currentShape && (
             currentShape.type === 'line' ? <Line points={currentShape.points} stroke={currentShape.color} strokeWidth={currentShape.strokeWidth} tension={0.5} lineCap="round" lineJoin="round" /> :
             currentShape.type === 'rect' ? <Rect x={currentShape.x} y={currentShape.y} width={currentShape.width} height={currentShape.height} stroke={currentShape.color} strokeWidth={currentShape.strokeWidth} dash={[6, 3]} /> :
-            <Ellipse x={currentShape.x} y={currentShape.y} radiusX={currentShape.radiusX} radiusY={currentShape.radiusY} stroke={currentShape.color} strokeWidth={currentShape.strokeWidth} dash={[6, 3]} />
+            currentShape.type === 'circle' ? <Ellipse x={currentShape.x} y={currentShape.y} radiusX={currentShape.radiusX} radiusY={currentShape.radiusY} stroke={currentShape.color} strokeWidth={currentShape.strokeWidth} dash={[6, 3]} /> :
+            currentShape.type === 'dimension' ? <DimensionLine points={currentShape.points} color={currentShape.color} strokeWidth={currentShape.strokeWidth} /> :
+            null
           )}
           {Object.entries(remoteCursors).map(([clientId, cursor]) => (
             cursor && (
@@ -1906,6 +1987,16 @@ function Whiteboard() {
           ))}
           {tool === 'select' && <Transformer ref={transformerRef} borderDash={[3, 3]} anchorCornerRadius={3} />}
         </Layer>
+
+        <CommentIndicator 
+          shapes={shapes}
+          unresolvedShapeIds={unresolvedShapeIds}
+          comments={allComments}
+          stageScale={stageScale}
+          onBadgeClick={(shapeId, pos) => {
+            setActiveCommentThread({ shapeId, pos });
+          }}
+        />
 
       </Stage>
       </div>
@@ -2002,6 +2093,53 @@ function Whiteboard() {
             }
             return null;
         })}
+
+        {/* Floating Comment Thread Overlay */}
+        {activeCommentThread && (
+          <CommentThread 
+            shapeId={activeCommentThread.shapeId}
+            comments={allComments[activeCommentThread.shapeId] || []}
+            position={{
+                x: activeCommentThread.pos.x * stageScale + stagePos.x + 20,
+                y: activeCommentThread.pos.y * stageScale + stagePos.y - 20
+            }}
+            currentUser={currentUser}
+            roomMembers={stackUsers}
+            onClose={() => setActiveCommentThread(null)}
+            onAddComment={(shapeId, comment) => {
+                addComment(shapeId, comment);
+                
+                // Emit notification
+                const shape = shapes[shapeId];
+                if (shape && socketRef.current) {
+                    socketRef.current.emit('comment-notify', {
+                        roomId,
+                        shapeCreatorId: shape.creatorId || 'admin', // Future proofing
+                        commenterName: currentUser.name
+                    });
+                    
+                    // Check for @mentions in text to emit mention notifications
+                    const mentions = comment.text.match(/@(\S+)/g);
+                    if (mentions) {
+                        mentions.forEach(m => {
+                            const name = m.substring(1);
+                            // Find user by name in stackUsers
+                            const mentionedUser = stackUsers.find(u => u.name === name);
+                            if (mentionedUser && mentionedUser.id !== currentUser.id) {
+                                socketRef.current.emit('mention-notify', {
+                                    roomId,
+                                    mentionedUserId: mentionedUser.id,
+                                    mentionerName: currentUser.name
+                                });
+                            }
+                        });
+                    }
+                }
+            }}
+            onResolveThread={(shapeId) => resolveThread(shapeId)}
+            onDeleteComment={(shapeId, commentId) => deleteComment(shapeId, commentId)}
+          />
+        )}
       </div>
       
       <MobileToolbar 

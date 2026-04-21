@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.0",
     "buffer": "^6.0.3",
     "framer-motion": "^12.38.0",
     "konva": "^10.2.3",
@@ -24,6 +26,7 @@
     "react-router-dom": "^7.14.0",
     "simple-peer": "^9.11.1",
     "socket.io-client": "^4.8.3",
+    "three": "^0.184.0",
     "use-image": "^1.1.4",
     "vite-plugin-node-polyfills": "^0.26.0",
     "y-socket.io": "^1.1.3",
