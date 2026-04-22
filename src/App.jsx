@@ -2237,10 +2237,13 @@ function MobileToolbar({
     );
 }
 
+import CADApp from './cad/CADApp.jsx';
+
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to={`/${generateRoomId()}`} replace />} />
+      <Route path="/cad" element={<CADApp />} />
       <Route path="/:roomId" element={<Whiteboard />} />
     </Routes>
   );
