@@ -20,7 +20,7 @@ import {
   Pencil, Square, CircleIcon, Trash2,
   Undo2, Redo2, RotateCcw, MousePointer2,
   Minus, Plus, Palette, Link, Check, StickyNote, X, Download,
-  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code, Ruler, Grid3X3
+  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code, Ruler, Grid3X3, BarChart3, Globe
 } from 'lucide-react';
 import useConnectors, { computeConnectorPoints, getShapeEdgePoints } from './hooks/useConnectors.js';
 import CallPanel from './components/CallPanel.jsx';
@@ -43,6 +43,8 @@ import useComments from './hooks/useComments.js';
 import useMentions from './hooks/useMentions.js';
 import useNotifications from './hooks/useNotifications.js';
 import { Html } from 'react-konva-utils';
+import ChartWidget from './components/ChartWidget.jsx';
+import IframeWidget from './components/IframeWidget.jsx';
 import './index.css';
 
 // --- Server URL ---
@@ -779,6 +781,10 @@ function Whiteboard() {
       setCurrentShape({ type: 'circle', x: pos.x, y: pos.y, radiusX: 0, radiusY: 0, color, strokeWidth });
     } else if (tool === 'dimension') {
       setCurrentShape({ type: 'dimension', points: [pos.x, pos.y, pos.x, pos.y], color, strokeWidth });
+    } else if (tool === 'chart') {
+      setCurrentShape({ type: 'chart', x: pos.x, y: pos.y, width: 0, height: 0 });
+    } else if (tool === 'iframe') {
+      setCurrentShape({ type: 'iframe', x: pos.x, y: pos.y, width: 0, height: 0 });
     }
   }, [tool, color, strokeWidth, spaceHeld, stagePos, getRelativePointerPos]);
 
@@ -887,6 +893,15 @@ function Whiteboard() {
       setCurrentShape(prev => ({
         ...prev,
         points: [start.x, start.y, pos.x, pos.y],
+      }));
+    } else if (tool === 'chart' || tool === 'iframe') {
+      const start = drawStartRef.current;
+      setCurrentShape(prev => ({
+        ...prev,
+        x: Math.min(start.x, pos.x),
+        y: Math.min(start.y, pos.y),
+        width: Math.abs(pos.x - start.x),
+        height: Math.abs(pos.y - start.y),
       }));
     }
   }, [isDrawing, isPanning, currentShape, tool, broadcastCursor, getRelativePointerPos]);
@@ -1408,6 +1423,22 @@ function Whiteboard() {
               unit="cm"
             />
           );
+        case 'chart':
+          return (
+            <Group key={id} {...commonProps}>
+              <Html divProps={{ style: { width: shape.width, height: shape.height } }}>
+                <ChartWidget shapeId={id} ydoc={activeDoc} initialData={shape.chartData ? JSON.parse(shape.chartData) : null} />
+              </Html>
+            </Group>
+          );
+        case 'iframe':
+          return (
+            <Group key={id} {...commonProps}>
+              <Html divProps={{ style: { width: shape.width, height: shape.height } }}>
+                <IframeWidget shapeId={id} ydoc={activeDoc} initialUrl={shape.url} />
+              </Html>
+            </Group>
+          );
         case 'kanban':
           return (
             <Group key={id} {...commonProps}>
@@ -1575,6 +1606,12 @@ function Whiteboard() {
           </button>
           <button className={`tool-btn ${tool === 'dimension' ? 'active' : ''}`} onClick={() => { setTool('dimension'); setActiveEmoji(null); }} title="Dimension Tool">
             <Ruler size={18} />
+          </button>
+          <button className={`tool-btn ${tool === 'chart' ? 'active' : ''}`} onClick={() => { setTool('chart'); setActiveEmoji(null); }} title="Interactive Chart">
+            <BarChart3 size={18} />
+          </button>
+          <button className={`tool-btn ${tool === 'iframe' ? 'active' : ''}`} onClick={() => { setTool('iframe'); setActiveEmoji(null); }} title="Web Portal">
+            <Globe size={18} />
           </button>
           <div className="toolbar-divider" />
           <button 
@@ -1974,6 +2011,7 @@ function Whiteboard() {
             currentShape.type === 'rect' ? <Rect x={currentShape.x} y={currentShape.y} width={currentShape.width} height={currentShape.height} stroke={currentShape.color} strokeWidth={currentShape.strokeWidth} dash={[6, 3]} /> :
             currentShape.type === 'circle' ? <Ellipse x={currentShape.x} y={currentShape.y} radiusX={currentShape.radiusX} radiusY={currentShape.radiusY} stroke={currentShape.color} strokeWidth={currentShape.strokeWidth} dash={[6, 3]} /> :
             currentShape.type === 'dimension' ? <DimensionLine points={currentShape.points} color={currentShape.color} strokeWidth={currentShape.strokeWidth} /> :
+            currentShape.type === 'chart' || currentShape.type === 'iframe' ? <Rect x={currentShape.x} y={currentShape.y} width={currentShape.width} height={currentShape.height} stroke="#6366f1" strokeWidth={2} dash={[6, 3]} /> :
             null
           )}
           {Object.entries(remoteCursors).map(([clientId, cursor]) => (

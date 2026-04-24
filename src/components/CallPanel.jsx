@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Mic, MicOff, Video, VideoOff, PhoneOff, AlertCircle, StickyNote, Loader2 } from 'lucide-react';
 import useWebRTC from '../hooks/useWebRTC';
 import * as Y from 'yjs';
+import { insertDesignFromAI } from '../utils/AIDispatcher.js';
 
 // Video Component for each tile
 const VideoTile = ({ stream, isLocal = false, muted = false, name = "User" }) => {
@@ -133,14 +134,39 @@ export default function CallPanel({ isOpen, onClose, socket, roomId, currentUser
     recognition.onresult = (event) => {
       const transcript = event.results[event.results.length - 1][0].transcript;
       if (transcript.trim() && ydoc) {
+        const text = transcript.trim().toLowerCase();
+        
+        // Voice Command Parsing
+        const viewportCenter = arguments[0].viewportCenter || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+        
+        if (text.startsWith('hey canva') || text.startsWith('canva')) {
+           const command = text.replace(/^(hey )?canva\s*/, '');
+           
+           if (command.includes('clear board') || command.includes('clear the board')) {
+               insertDesignFromAI(ydoc, viewportCenter, 1, 'clear', {});
+           } else if (command.includes('mind map') || command.includes('mindmap')) {
+               insertDesignFromAI(ydoc, viewportCenter, 1, 'mindmap', { topic: 'Voice Mindmap' });
+           } else if (command.includes('flowchart') || command.includes('flow chart')) {
+               insertDesignFromAI(ydoc, viewportCenter, 1, 'flowchart', {});
+           } else if (command.includes('summarize')) {
+               insertDesignFromAI(ydoc, viewportCenter, 1, 'summarize', {});
+           } else if (command.includes('smart align') || command.includes('align notes')) {
+               insertDesignFromAI(ydoc, viewportCenter, 1, 'smartAlign', {});
+           } else {
+               // Fallback: cluster
+               insertDesignFromAI(ydoc, viewportCenter, 1, 'clusterStickyNotes', {});
+           }
+           return; // Stop here, don't make a sticky note
+        }
+
+        // Standard dictation -> Sticky Note
         const id = 'note-voice-' + Date.now();
         const yNotes = ydoc.getMap('stickyNotes');
         ydoc.transact(() => {
           const noteMap = new Y.Map();
           noteMap.set('id', id);
-          // Random offset near center
-          noteMap.set('x', (arguments[0].viewportCenter?.x || 0) + (Math.random() - 0.5) * 200);
-          noteMap.set('y', (arguments[0].viewportCenter?.y || 0) + (Math.random() - 0.5) * 200);
+          noteMap.set('x', viewportCenter.x + (Math.random() - 0.5) * 200);
+          noteMap.set('y', viewportCenter.y + (Math.random() - 0.5) * 200);
           noteMap.set('backgroundColor', '#fbcfe8'); // Pink for voice notes
           const yText = new Y.Text();
           yText.insert(0, transcript.trim());

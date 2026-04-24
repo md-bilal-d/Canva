@@ -21,11 +21,11 @@ export default function AISidebar({ isOpen, onClose, ydoc, viewportCenter, stage
     setTimeout(() => {
         if (mode === 'image') {
             const id = 'image-' + Date.now();
-            // Use a high-quality placeholder that looks like a real AI generation for now
             const seed = Math.floor(Math.random() * 1000);
             const imageUrl = `https://picsum.photos/seed/${seed}/800/600`;
-            
             insertDesignFromAI(ydoc, viewportCenter, stageScale, 'image', { src: imageUrl, prompt });
+        } else if (mode === 'expand') {
+            insertDesignFromAI(ydoc, viewportCenter, stageScale, 'outpaint', { prompt });
         } else {
             const lower = prompt.toLowerCase();
             let intent = 'moodboard';

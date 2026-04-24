@@ -59,7 +59,7 @@ function getEdgePoint(shape, targetX, targetY) {
  * Computes points for a connector between two shapes.
  * Supports 'bezier' (default) or 'orthogonal' routing.
  */
-export function computeConnectorPoints(fromShape, toShape, routingType = 'bezier') {
+export function computeConnectorPoints(fromShape, toShape, routingType = 'bezier', allShapes = {}) {
   if (!fromShape || !toShape) return null;
 
   const fromCenter = getShapeCenter(fromShape);
@@ -85,6 +85,79 @@ export function computeConnectorPoints(fromShape, toShape, routingType = 'bezier
       // Vertical exit
       points.push(fromPt.x, midY);
       points.push(toPt.x, midY);
+    }
+
+    points.push(toPt.x, toPt.y);
+
+    return {
+      from: fromPt,
+      to: toPt,
+      points: points,
+      bezier: false
+    };
+  } else if (routingType === 'magic') {
+    // Advanced Orthogonal (Pseudo-A* for obstacle avoidance)
+    // For performance, we'll do a simple bounding-box check to route around the most obvious obstacle
+    // A full A* grid search is too heavy for real-time React render
+    const points = [];
+    points.push(fromPt.x, fromPt.y);
+
+    const midX = (fromPt.x + toPt.x) / 2;
+    const midY = (fromPt.y + toPt.y) / 2;
+
+    let useHorizontalExit = (fromPt.side === 'left' || fromPt.side === 'right');
+    
+    // Quick check if mid path hits an obstacle
+    let hitsObstacle = false;
+    let obstacleBox = null;
+    
+    const checkLineObstacle = (x1, y1, x2, y2) => {
+        const minX = Math.min(x1, x2);
+        const maxX = Math.max(x1, x2);
+        const minY = Math.min(y1, y2);
+        const maxY = Math.max(y1, y2);
+        
+        for (const [id, shape] of Object.entries(allShapes)) {
+            if (id === fromShape.id || id === toShape.id) continue;
+            const sx = shape.scaleX || 1;
+            const sy = shape.scaleY || 1;
+            const w = (shape.width || shape.radiusX * 2 || 100) * sx;
+            const h = (shape.height || shape.radiusY * 2 || 100) * sy;
+            const cx = shape.x;
+            const cy = shape.y;
+            
+            // Check intersection with shape bounding box (inflated by padding)
+            const pad = 20;
+            if (!(maxX < cx - pad || minX > cx + w + pad || maxY < cy - pad || minY > cy + h + pad)) {
+                return { cx, cy, w, h };
+            }
+        }
+        return null;
+    };
+
+    if (useHorizontalExit) {
+        obstacleBox = checkLineObstacle(fromPt.x, fromPt.y, midX, fromPt.y) || checkLineObstacle(midX, fromPt.y, midX, toPt.y);
+        if (obstacleBox) {
+            // Route around
+            const yOffset = obstacleBox.cy < midY ? obstacleBox.h + 40 : -40;
+            points.push(midX, fromPt.y);
+            points.push(midX, obstacleBox.cy + yOffset);
+            points.push(toPt.x, obstacleBox.cy + yOffset);
+        } else {
+            points.push(midX, fromPt.y);
+            points.push(midX, toPt.y);
+        }
+    } else {
+        obstacleBox = checkLineObstacle(fromPt.x, fromPt.y, fromPt.x, midY) || checkLineObstacle(fromPt.x, midY, toPt.x, midY);
+        if (obstacleBox) {
+            const xOffset = obstacleBox.cx < midX ? obstacleBox.w + 40 : -40;
+            points.push(fromPt.x, midY);
+            points.push(obstacleBox.cx + xOffset, midY);
+            points.push(obstacleBox.cx + xOffset, toPt.y);
+        } else {
+            points.push(fromPt.x, midY);
+            points.push(toPt.x, midY);
+        }
     }
 
     points.push(toPt.x, toPt.y);

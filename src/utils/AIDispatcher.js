@@ -204,6 +204,38 @@ export function insertDesignFromAI(ydoc, currentViewPos, scale, intent, params) 
           }
           break;
       }
+      case 'outpaint': {
+          let targetId = params.targetId;
+          if (!targetId) {
+             yShapes.forEach((val, key) => {
+                 if (val.type === 'image') targetId = key;
+             });
+          }
+
+          if (targetId) {
+              const existing = yShapes.get(targetId);
+              const newWidth = existing.width * 1.5;
+              const newHeight = existing.height * 1.5;
+              const newX = existing.x - (newWidth - existing.width) / 2;
+              const newY = existing.y - (newHeight - existing.height) / 2;
+
+              const outpaintId = 'shape-' + Date.now() + '-outpaint';
+              yShapes.set(outpaintId, {
+                  id: outpaintId,
+                  type: 'image',
+                  src: `https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=${Math.round(newWidth)}&h=${Math.round(newHeight)}&auto=format&fit=crop`,
+                  x: newX,
+                  y: newY,
+                  width: newWidth,
+                  height: newHeight,
+                  prompt: `Outpainted: ${params.prompt || existing.prompt || 'background'}`
+              });
+              
+              yShapes.delete(targetId);
+              yShapes.set(targetId, existing);
+          }
+          break;
+      }
       default:
         console.warn('Unknown AI intent:', intent);
     }

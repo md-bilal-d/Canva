@@ -30,7 +30,7 @@ export default function ConnectorLayer({
       const toShape = shapes[conn.toShapeId];
       if (!fromShape || !toShape) return null;
 
-      const pts = computeConnectorPoints(fromShape, toShape);
+      const pts = computeConnectorPoints(fromShape, toShape, conn.routingType || 'magic', shapes);
       if (!pts) return null;
 
       return { ...conn, computedPoints: pts };
@@ -111,8 +111,8 @@ export default function ConnectorLayer({
                 fill={conn.color || '#6366f1'}
                 pointerLength={10}
                 pointerWidth={8}
-                tension={0}
-                bezier={true}
+                tension={pts.bezier ? 0.5 : 0}
+                bezier={pts.bezier}
                 hitStrokeWidth={12}
                 onDblClick={() => handleConnectorDblClick(conn.id, conn)}
               />

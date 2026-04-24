@@ -20,9 +20,22 @@ export default function ScenePanel({ isOpen, onClose, ydoc, stagePos, stageScale
     }
   };
 
+  const [autoPlay, setAutoPlay] = useState(false);
+
+  React.useEffect(() => {
+    let timer;
+    if (isPlaying && autoPlay) {
+      timer = setTimeout(() => {
+        nextScene();
+      }, 3000);
+    }
+    return () => clearTimeout(timer);
+  }, [isPlaying, autoPlay, currentIndex, scenes.length]);
+
   const togglePresentation = () => {
     if (isPlaying) {
       setIsPlaying(false);
+      setAutoPlay(false);
     } else {
       setIsPlaying(true);
       if (scenes.length > 0) {
@@ -36,6 +49,7 @@ export default function ScenePanel({ isOpen, onClose, ydoc, stagePos, stageScale
       handlePlayScene(currentIndex + 1);
     } else {
       setIsPlaying(false); // End of presentation
+      setAutoPlay(false);
     }
   };
 
@@ -98,11 +112,19 @@ export default function ScenePanel({ isOpen, onClose, ydoc, stagePos, stageScale
 
       {/* Presentation Controls overlay when playing */}
       {isPlaying && (
-         <div className="p-2 bg-blue-600 text-white flex justify-between items-center">
-            <span className="text-xs font-medium px-2">Scene {currentIndex + 1} / {scenes.length}</span>
-            <button onClick={nextScene} className="flex items-center gap-1 text-xs font-bold bg-white/20 hover:bg-white/30 px-3 py-1 rounded">
-               Next <ChevronRight size={14} />
-            </button>
+         <div className="p-2 bg-blue-600 text-white flex flex-col gap-2">
+            <div className="flex justify-between items-center">
+                <span className="text-xs font-medium px-2">Scene {currentIndex + 1} / {scenes.length}</span>
+                <button onClick={nextScene} className="flex items-center gap-1 text-xs font-bold bg-white/20 hover:bg-white/30 px-3 py-1 rounded">
+                   Next <ChevronRight size={14} />
+                </button>
+            </div>
+            <div className="flex justify-between items-center px-2">
+                <label className="text-xs flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={autoPlay} onChange={(e) => setAutoPlay(e.target.checked)} className="rounded text-blue-500 focus:ring-blue-500 bg-white/20 border-transparent" />
+                    Auto-Play (3s)
+                </label>
+            </div>
          </div>
       )}
     </div>

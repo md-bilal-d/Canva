@@ -24,6 +24,7 @@
     "react-konva": "^19.2.3",
     "react-konva-utils": "^2.0.0",
     "react-router-dom": "^7.14.0",
+    "recharts": "^3.8.1",
     "simple-peer": "^9.11.1",
     "socket.io-client": "^4.8.3",
     "three": "^0.184.0",
