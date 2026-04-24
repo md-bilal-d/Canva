@@ -45,6 +45,7 @@ import useNotifications from './hooks/useNotifications.js';
 import { Html } from 'react-konva-utils';
 import ChartWidget from './components/ChartWidget.jsx';
 import IframeWidget from './components/IframeWidget.jsx';
+import VoiceControl from './components/VoiceControl.jsx';
 import './index.css';
 
 // --- Server URL ---
@@ -2203,6 +2204,19 @@ function Whiteboard() {
         isOpen={isCodeExportOpen}
         onClose={() => setIsCodeExportOpen(false)}
         selectedShapes={selectedId ? [shapes[selectedId]].filter(Boolean) : []}
+      />
+
+      <VoiceControl 
+        ydoc={activeDoc}
+        viewportCenter={{
+          x: (window.innerWidth / 2 - stagePos.x) / stageScale,
+          y: (window.innerHeight / 2 - stagePos.y) / stageScale
+        }}
+        stageScale={stageScale}
+        setStageScale={setStageScale}
+        setStagePos={setStagePos}
+        setTool={setTool}
+        onAIAction={(open) => setIsAIOpen(open)}
       />
      </div>
     </div>
