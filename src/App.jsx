@@ -46,6 +46,7 @@ import { Html } from 'react-konva-utils';
 import ChartWidget from './components/ChartWidget.jsx';
 import IframeWidget from './components/IframeWidget.jsx';
 import VoiceControl from './components/VoiceControl.jsx';
+import FrameShape from './components/FrameShape.jsx';
 import './index.css';
 
 // --- Server URL ---
@@ -701,6 +702,15 @@ function Whiteboard() {
     }
   }, [stageScale, stagePos, isBroadcastingView]);
 
+  const toggleBroadcasting = useCallback(() => {
+    const newState = !isBroadcastingView;
+    setIsBroadcastingView(newState);
+    providerRef.current.awareness.setLocalStateField('isPresenter', newState);
+    if (newState) {
+        providerRef.current.awareness.setLocalStateField('viewport', { x: stagePos.x, y: stagePos.y, scale: stageScale });
+    }
+  }, [isBroadcastingView, stagePos, stageScale]);
+
   const updateViewportPos = useCallback((pos) => {
     setStagePos(pos);
     if (isBroadcastingView) {
@@ -782,6 +792,8 @@ function Whiteboard() {
       setCurrentShape({ type: 'circle', x: pos.x, y: pos.y, radiusX: 0, radiusY: 0, color, strokeWidth });
     } else if (tool === 'dimension') {
       setCurrentShape({ type: 'dimension', points: [pos.x, pos.y, pos.x, pos.y], color, strokeWidth });
+    } else if (tool === 'frame') {
+      setCurrentShape({ type: 'frame', x: pos.x, y: pos.y, width: 0, height: 0, name: `Frame ${Object.keys(shapes).filter(id => shapes[id].type === 'frame').length + 1}` });
     } else if (tool === 'chart') {
       setCurrentShape({ type: 'chart', x: pos.x, y: pos.y, width: 0, height: 0 });
     } else if (tool === 'iframe') {
@@ -895,7 +907,7 @@ function Whiteboard() {
         ...prev,
         points: [start.x, start.y, pos.x, pos.y],
       }));
-    } else if (tool === 'chart' || tool === 'iframe') {
+    } else if (tool === 'chart' || tool === 'iframe' || tool === 'frame') {
       const start = drawStartRef.current;
       setCurrentShape(prev => ({
         ...prev,
@@ -1143,6 +1155,53 @@ function Whiteboard() {
     }, 'local');
   }, []);
 
+  const propagateMasterChanges = useCallback((masterId, masterShape) => {
+    const yShapes = yShapesRef.current;
+    if (!yShapes) return;
+    
+    const { x, y, rotation, id, isMaster, ...syncProps } = masterShape;
+    
+    yShapes.forEach((shape, shapeId) => {
+      if (shape.masterId === masterId && !shape.isMaster) {
+        yShapes.set(shapeId, { ...shape, ...syncProps });
+      }
+    });
+  }, []);
+
+  const handleMakeMaster = useCallback(() => {
+    if (!selectedId) return;
+    const yShapes = yShapesRef.current;
+    if (!yShapes) return;
+    const shape = yShapes.get(selectedId);
+    if (!shape) return;
+
+    yShapes.doc.transact(() => {
+      yShapes.set(selectedId, { ...shape, isMaster: true, masterId: selectedId });
+    }, 'local');
+  }, [selectedId]);
+
+  const handleDuplicate = useCallback(() => {
+    if (!selectedId) return;
+    const yShapes = yShapesRef.current;
+    if (!yShapes) return;
+    const shape = yShapes.get(selectedId);
+    if (!shape) return;
+
+    const id = 'shape-' + Date.now();
+    const newShape = {
+        ...shape,
+        id,
+        x: shape.x + 20,
+        y: shape.y + 20,
+        isMaster: false,
+    };
+
+    yShapes.doc.transact(() => {
+      yShapes.set(id, newShape);
+    }, 'local');
+    setSelectedId(id);
+  }, [selectedId, shapes]);
+
   const handleShapeDragEnd = useCallback((id, e) => {
     const yShapes = yShapesRef.current;
     if (!yShapes) return;
@@ -1163,15 +1222,19 @@ function Whiteboard() {
     const prev = yShapes.get(id);
     if (!prev) return;
 
-    yShapes.doc.transact(() => {
-      yShapes.set(id, {
+      const newShape = {
         ...prev,
         x: node.x(),
         y: node.y(),
         scaleX: node.scaleX(),
         scaleY: node.scaleY(),
         rotation: node.rotation(),
-      });
+      };
+      yShapes.set(id, newShape);
+      
+      if (newShape.isMaster) {
+          propagateMasterChanges(newShape.masterId, newShape);
+      }
     }, 'local');
   }, []);
 
@@ -1452,6 +1515,16 @@ function Whiteboard() {
               </Html>
             </Group>
           );
+        case 'frame':
+          return (
+            <FrameShape
+              key={id}
+              shape={shape}
+              isSelected={id === selectedId}
+              onSelect={() => setSelectedId(id)}
+              draggable={tool === 'select'}
+            />
+          );
         default: return null;
       }
     });
@@ -1495,13 +1568,23 @@ function Whiteboard() {
     const animate = (time) => {
       if (!startTime) startTime = time;
       const progress = Math.min((time - startTime) / duration, 1);
-      const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+      
+      // Premium easing: Slow start, fast middle, bouncy end (cubic-bezierish)
+      const eased = progress < 0.5 
+        ? 4 * progress * progress * progress 
+        : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+      // Fly-through effect: zoom out slightly in the middle
+      const zoomOutFactor = 0.85;
+      const currentScale = progress < 0.5
+        ? startScale + (startScale * zoomOutFactor - startScale) * (progress * 2)
+        : (startScale * zoomOutFactor) + (targetScale - (startScale * zoomOutFactor)) * ((progress - 0.5) * 2);
 
       setStagePos({
         x: startX + (targetX - startX) * eased,
         y: startY + (targetY - startY) * eased
       });
-      setStageScale(startScale + (targetScale - startScale) * eased);
+      setStageScale(currentScale);
 
       if (progress < 1) requestAnimationFrame(animate);
     };
@@ -1564,6 +1647,9 @@ function Whiteboard() {
                 stagePos={stagePos}
                 stageScale={stageScale}
                 onTransitionTo={handleTransitionTo}
+                shapes={shapes}
+                followUserId={followUserId}
+                remoteCursors={remoteCursors}
               />
             </div>
           </motion.div>
@@ -1597,6 +1683,9 @@ function Whiteboard() {
           </button>
           <button className={`tool-btn ${tool === 'note' ? 'active' : ''}`} onClick={() => { setTool('note'); setActiveEmoji(null); }} title="Sticky Note">
             <StickyNote size={18} />
+          </button>
+          <button className={`tool-btn ${tool === 'frame' ? 'active' : ''}`} onClick={() => { setTool('frame'); setActiveEmoji(null); }} title="Frame / Slide">
+            <LayoutTemplate size={18} />
           </button>
           <button 
             className={`tool-btn ${isOrthogonalMode ? 'active' : ''}`}
@@ -1656,7 +1745,21 @@ function Whiteboard() {
           <span className="toolbar-label">Color</span>
           <div className="color-picker-wrapper">
             <div className="color-picker-swatch" style={{ background: color }} />
-            <input type="color" className="color-picker-input" value={color} onChange={(e) => setColor(e.target.value)} />
+            <input type="color" className="color-picker-input" value={color} onChange={(e) => {
+              const newColor = e.target.value;
+              setColor(newColor);
+              if (selectedId) {
+                const yShapes = yShapesRef.current;
+                const shape = yShapes.get(selectedId);
+                if (shape) {
+                  yShapes.doc.transact(() => {
+                    const updated = { ...shape, color: newColor };
+                    yShapes.set(selectedId, updated);
+                    if (updated.isMaster) propagateMasterChanges(updated.masterId, updated);
+                  }, 'local');
+                }
+              }
+            }} />
           </div>
         </div>
         <div className="toolbar-divider" />
@@ -1664,7 +1767,21 @@ function Whiteboard() {
           <span className="toolbar-label">Size</span>
           <div className="stroke-slider-wrapper">
             <Minus size={10} color="rgba(255,255,255,0.3)" />
-            <input type="range" className="stroke-slider" min={1} max={20} value={strokeWidth} onChange={(e) => setStrokeWidth(Number(e.target.value))} />
+            <input type="range" className="stroke-slider" min={1} max={20} value={strokeWidth} onChange={(e) => {
+              const val = Number(e.target.value);
+              setStrokeWidth(val);
+              if (selectedId) {
+                const yShapes = yShapesRef.current;
+                const shape = yShapes.get(selectedId);
+                if (shape) {
+                  yShapes.doc.transact(() => {
+                    const updated = { ...shape, strokeWidth: val };
+                    yShapes.set(selectedId, updated);
+                    if (updated.isMaster) propagateMasterChanges(updated.masterId, updated);
+                  }, 'local');
+                }
+              }
+            }} />
             <Plus size={10} color="rgba(255,255,255,0.3)" />
             <span className="stroke-value">{strokeWidth}px</span>
           </div>
@@ -1769,6 +1886,25 @@ function Whiteboard() {
             <Code size={18} className={isCodeExportOpen ? "text-blue-400" : ""} />
           </button>
         </div>
+
+        {selectedId && (
+            <>
+                <div className="toolbar-divider" />
+                <div className="toolbar-section">
+                    <span className="toolbar-label">Component</span>
+                    <button 
+                        className={`tool-btn ${shapes[selectedId]?.isMaster ? 'active' : ''}`} 
+                        onClick={handleMakeMaster} 
+                        title="Make Master Component"
+                    >
+                        <Zap size={18} className={shapes[selectedId]?.isMaster ? "text-yellow-400" : ""} />
+                    </button>
+                    <button className="tool-btn" onClick={handleDuplicate} title="Duplicate / Create Instance">
+                        <Plus size={18} />
+                    </button>
+                </div>
+            </>
+        )}
       </div>
 
       <div className="connection-status animate-fade-in" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', boxShadow: 'none', right: '1.5rem', top: '1.5rem', padding: 0 }}>
@@ -1779,6 +1915,20 @@ function Whiteboard() {
         <div style={{ background: 'white', display: 'flex', alignItems: 'center', borderRadius: '30px', padding: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9' }}>
            <AvatarStack users={stackUsers} onAvatarClick={handleAvatarClick} />
         </div>
+        <button 
+          onClick={toggleBroadcasting}
+          className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm transition-all shadow-lg ${
+            isBroadcastingView 
+              ? 'bg-red-600 text-white animate-pulse-red' 
+              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+          }`}
+        >
+          {isBroadcastingView ? (
+            <><div className="w-2 h-2 bg-white rounded-full animate-ping" /> STOP LIVE</>
+          ) : (
+            <><Zap size={14} className="text-yellow-500 fill-yellow-500" /> GO LIVE</>
+          )}
+        </button>
       </div>
 
       <UserProfile 
@@ -1859,12 +2009,15 @@ function Whiteboard() {
       />
 
       <ScenePanel 
-        isOpen={isScenesOpen}
-        onClose={() => setIsScenesOpen(false)}
+        isOpen={isScenesOpen} 
+        onClose={() => setIsScenesOpen(false)} 
         ydoc={activeDoc}
         stagePos={stagePos}
         stageScale={stageScale}
         onTransitionTo={handleTransitionTo}
+        shapes={shapes}
+        followUserId={followUserId}
+        remoteCursors={remoteCursors}
       />
 
       <div 
