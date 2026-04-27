@@ -20,7 +20,7 @@ import {
   Pencil, Square, CircleIcon, Trash2,
   Undo2, Redo2, RotateCcw, MousePointer2,
   Minus, Plus, Palette, Link, Check, StickyNote, X, Download,
-  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code, Ruler, Grid3X3, BarChart3, Globe
+  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code, Ruler, Grid3X3, BarChart3, Globe, Compass
 } from 'lucide-react';
 import useConnectors, { computeConnectorPoints, getShapeEdgePoints } from './hooks/useConnectors.js';
 import CallPanel from './components/CallPanel.jsx';
@@ -47,6 +47,9 @@ import ChartWidget from './components/ChartWidget.jsx';
 import IframeWidget from './components/IframeWidget.jsx';
 import VoiceControl from './components/VoiceControl.jsx';
 import FrameShape from './components/FrameShape.jsx';
+import PortalShape from './components/PortalShape.jsx';
+import BrandKitSidebar from './components/BrandKitSidebar.jsx';
+import { calculateLayoutUpdates, LAYOUT_TYPES } from './utils/LayoutEngine';
 import './index.css';
 
 // --- Server URL ---
@@ -248,6 +251,9 @@ function Whiteboard() {
   const [isBroadcastingView, setIsBroadcastingView] = useState(false);
   const [momentumShapes, setMomentumShapes] = useState({}); // { id: { vx, vy } }
   const [isCodeExportOpen, setIsCodeExportOpen] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [transitionProgress, setTransitionProgress] = useState(0);
+  const [isBrandKitOpen, setIsBrandKitOpen] = useState(false);
 
   const currentUserData = useCurrentUser();
   const currentUser = useMemo(() => {
@@ -731,6 +737,60 @@ function Whiteboard() {
     return pos;
   }, [isGridEnabled]);
 
+  const handleTidyUp = useCallback((type = LAYOUT_TYPES.GRID) => {
+    const selectedShapes = Object.values(shapes).filter(s => s.id === selectedId); // Fallback to single selection if needed
+    // In a real app, we'd have a multi-select state. For now, let's tidy all or a specific group.
+    
+    const shapesToTidy = selectedId ? [shapes[selectedId]] : Object.values(shapes);
+    if (shapesToTidy.length <= 1) return;
+
+    const center = getRelativePointerPos() || { x: 500, y: 500 };
+    const updates = calculateLayoutUpdates(shapesToTidy, type, center.x - 200, center.y - 200);
+
+    activeDoc.transact(() => {
+      updates.forEach(u => {
+        const existing = yShapesRef.current.get(u.id);
+        if (existing) {
+          yShapesRef.current.set(u.id, { ...existing, x: u.x, y: u.y });
+        }
+      });
+    }, 'local');
+  }, [shapes, selectedId, activeDoc, getRelativePointerPos]);
+
+  const handleTransitionTo = useCallback((scene) => {
+    // Phase 3: Magic Move Implementation
+    // We animate the stage AND the individual shapes if their positions are stored in the scene
+    setIsTransitioning(true);
+    
+    const startPos = { ...stagePos };
+    const startScale = stageScale;
+    const duration = 800;
+    const startTime = Date.now();
+
+    const animate = () => {
+        const now = Date.now();
+        const progress = Math.min(1, (now - startTime) / duration);
+        const ease = t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // easeInOutQuad
+        const e = ease(progress);
+
+        setStagePos({
+            x: startPos.x + (scene.x - startPos.x) * e,
+            y: startPos.y + (scene.y - startPos.y) * e
+        });
+        setStageScale(startScale + (scene.scale - startScale) * e);
+        setTransitionProgress(progress);
+
+        if (progress < 1) {
+            requestAnimationFrame(animate);
+        } else {
+            setIsTransitioning(false);
+            setTransitionProgress(0);
+        }
+    };
+
+    requestAnimationFrame(animate);
+  }, [stagePos, stageScale]);
+
   const handleMouseDown = useCallback((e) => {
     const pointer = stageRef.current.getPointerPosition();
     const relPos = getRelativePointerPos();
@@ -798,6 +858,23 @@ function Whiteboard() {
       setCurrentShape({ type: 'chart', x: pos.x, y: pos.y, width: 0, height: 0 });
     } else if (tool === 'iframe') {
       setCurrentShape({ type: 'iframe', x: pos.x, y: pos.y, width: 0, height: 0 });
+    } else if (tool === 'portal') {
+      // Create a portal that links to a far-away part of the canvas by default
+      const id = 'portal-' + Date.now();
+      activeDoc.transact(() => {
+          yShapesRef.current.set(id, {
+              id,
+              type: 'portal',
+              x: pos.x,
+              y: pos.y,
+              name: 'New Portal',
+              targetX: pos.x + 2000, // Teleport 2000px away
+              targetY: pos.y + 2000,
+              targetScale: 1
+          });
+      }, 'local');
+      setIsDrawing(false);
+      return;
     }
   }, [tool, color, strokeWidth, spaceHeld, stagePos, getRelativePointerPos]);
 
@@ -1221,7 +1298,7 @@ function Whiteboard() {
     if (!yShapes) return;
     const prev = yShapes.get(id);
     if (!prev) return;
-
+    yShapes.doc.transact(() => {
       const newShape = {
         ...prev,
         x: node.x(),
@@ -1231,12 +1308,11 @@ function Whiteboard() {
         rotation: node.rotation(),
       };
       yShapes.set(id, newShape);
-      
       if (newShape.isMaster) {
-          propagateMasterChanges(newShape.masterId, newShape);
+        propagateMasterChanges(newShape.masterId, newShape);
       }
     }, 'local');
-  }, []);
+  }, [propagateMasterChanges]);
 
   const handleDblClick = useCallback((id, shape) => {
     if (tool !== 'select') return;
@@ -1525,6 +1601,16 @@ function Whiteboard() {
               draggable={tool === 'select'}
             />
           );
+        case 'portal':
+          return (
+            <PortalShape
+              key={id}
+              shape={shape}
+              isSelected={id === selectedId}
+              onNavigate={handleTransitionTo}
+              draggable={tool === 'select'}
+            />
+          );
         default: return null;
       }
     });
@@ -1632,6 +1718,23 @@ function Whiteboard() {
       </AnimatePresence>
 
       <AnimatePresence>
+        {isBrandKitOpen && (
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="fixed top-6 right-6 z-[1001]"
+          >
+            <BrandKitSidebar 
+              isOpen={isBrandKitOpen}
+              onClose={() => setIsBrandKitOpen(false)}
+              ydoc={activeDoc}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {isScenesOpen && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -1702,6 +1805,12 @@ function Whiteboard() {
           </button>
           <button className={`tool-btn ${tool === 'iframe' ? 'active' : ''}`} onClick={() => { setTool('iframe'); setActiveEmoji(null); }} title="Web Portal">
             <Globe size={18} />
+          </button>
+          <button className={`tool-btn ${tool === 'portal' ? 'active' : ''}`} onClick={() => { setTool('portal'); setActiveEmoji(null); }} title="Navigation Portal">
+            <Compass size={18} />
+          </button>
+          <button className="tool-btn" onClick={() => handleTidyUp(LAYOUT_TYPES.GRID)} title="Tidy Up (Grid)">
+            <Grid3X3 size={18} className="text-blue-500" />
           </button>
           <div className="toolbar-divider" />
           <button 
@@ -1794,6 +1903,17 @@ function Whiteboard() {
           </button>
           <button className="tool-btn" onClick={() => undoManagerRef.current?.redo()} disabled={!canRedo} title="Redo">
             <Redo2 size={18} />
+          </button>
+        </div>
+        <div className="toolbar-divider" />
+        <div className="toolbar-section">
+          <span className="toolbar-label">Branding</span>
+          <button 
+            className={`tool-btn ${isBrandKitOpen ? 'active' : ''}`}
+            onClick={() => setIsBrandKitOpen(!isBrandKitOpen)}
+            title="Brand Kit"
+          >
+            <Palette size={18} className={isBrandKitOpen ? "text-indigo-500" : ""} />
           </button>
         </div>
         <div className="toolbar-divider" />
@@ -1902,6 +2022,37 @@ function Whiteboard() {
                     <button className="tool-btn" onClick={handleDuplicate} title="Duplicate / Create Instance">
                         <Plus size={18} />
                     </button>
+                    {shapes[selectedId]?.type === 'image' && (
+                        <>
+                            <div className="toolbar-divider" />
+                            <button 
+                                className="tool-btn bg-indigo-50 text-indigo-600 hover:bg-indigo-100" 
+                                onClick={() => {
+                                    // Simulated Magic Background Removal
+                                    const shape = shapes[selectedId];
+                                    activeDoc.transact(() => {
+                                        yShapesRef.current.set(selectedId, { ...shape, effect: 'no-bg', opacity: 0.8 });
+                                    }, 'local');
+                                }} 
+                                title="Remove Background (AI)"
+                            >
+                                <Sparkles size={16} /> <span className="text-[10px] ml-1 font-bold">REMOVE BG</span>
+                            </button>
+                            <button 
+                                className="tool-btn bg-purple-50 text-purple-600 hover:bg-purple-100" 
+                                onClick={() => {
+                                    // Simulated AI Upscale
+                                    const shape = shapes[selectedId];
+                                    activeDoc.transact(() => {
+                                        yShapesRef.current.set(selectedId, { ...shape, width: shape.width * 1.1, height: shape.height * 1.1, effect: 'upscale' });
+                                    }, 'local');
+                                }} 
+                                title="AI Upscale"
+                            >
+                                <Zap size={16} /> <span className="text-[10px] ml-1 font-bold">UPSCALE</span>
+                            </button>
+                        </>
+                    )}
                 </div>
             </>
         )}

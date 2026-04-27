@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Settings, X } from 'lucide-react';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { Settings, X, Upload, FileJson, Table } from 'lucide-react';
 
 export default function ChartWidget({ shapeId, ydoc, initialData }) {
     const [isEditing, setIsEditing] = useState(false);
@@ -30,6 +30,33 @@ export default function ChartWidget({ shapeId, ydoc, initialData }) {
         setIsEditing(false);
     };
 
+    const handleFileUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const content = event.target.result;
+            if (file.name.endsWith('.csv')) {
+                // Simple CSV to JSON parser
+                const lines = content.split('\n');
+                const headers = lines[0].split(',');
+                const result = lines.slice(1).map(line => {
+                    const obj = {};
+                    const currentLine = line.split(',');
+                    headers.forEach((header, i) => {
+                        obj[header.trim()] = isNaN(currentLine[i]) ? currentLine[i]?.trim() : Number(currentLine[i]);
+                    });
+                    return obj;
+                }).filter(o => o.name || Object.keys(o).length > 0);
+                setRawData(JSON.stringify(result, null, 2));
+            } else {
+                setRawData(content);
+            }
+        };
+        reader.readAsText(file);
+    };
+
     return (
         <div 
             className="w-full h-full bg-white rounded-xl shadow-lg border border-gray-200 flex flex-col overflow-hidden"
@@ -51,27 +78,48 @@ export default function ChartWidget({ shapeId, ydoc, initialData }) {
             
             <div className="flex-1 p-4 relative">
                 {isEditing ? (
-                    <div className="absolute inset-0 bg-white z-10 flex flex-col p-2">
-                        <textarea 
-                            className="flex-1 text-xs font-mono p-2 border rounded resize-none"
-                            value={rawData}
-                            onChange={(e) => setRawData(e.target.value)}
-                        />
-                        <button 
-                            onClick={handleSave}
-                            className="mt-2 w-full py-1 bg-indigo-600 text-white rounded text-xs font-semibold"
-                        >
-                            Save Data
-                        </button>
+                    <div className="absolute inset-0 bg-white z-10 flex flex-col p-4 gap-4">
+                        <div className="flex-1 flex flex-col gap-2">
+                             <label className="text-[10px] font-bold text-gray-400 uppercase">JSON DATA</label>
+                             <textarea 
+                                className="flex-1 text-xs font-mono p-3 border rounded-xl resize-none bg-gray-50 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                value={rawData}
+                                onChange={(e) => setRawData(e.target.value)}
+                            />
+                        </div>
+                        
+                        <div className="flex gap-2">
+                            <label className="flex-1 flex items-center justify-center gap-2 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold border border-indigo-100 cursor-pointer hover:bg-indigo-100 transition">
+                                <Upload size={14} /> Upload CSV/JSON
+                                <input type="file" className="hidden" accept=".csv,.json" onChange={handleFileUpload} />
+                            </label>
+                            <button 
+                                onClick={handleSave}
+                                className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition"
+                            >
+                                Save Data
+                            </button>
+                        </div>
                     </div>
                 ) : (
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={data}>
-                            <XAxis dataKey="name" fontSize={10} />
-                            <YAxis fontSize={10} />
-                            <Tooltip />
-                            <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                        </BarChart>
+                        {data.length > 0 && Object.keys(data[0]).length > 2 ? (
+                            <LineChart data={data}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} dy={10} />
+                                <YAxis fontSize={10} axisLine={false} tickLine={false} />
+                                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
+                                <Line type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={3} dot={{ fill: '#6366f1', strokeWidth: 2, r: 4, stroke: '#fff' }} />
+                            </LineChart>
+                        ) : (
+                            <BarChart data={data}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} dy={10} />
+                                <YAxis fontSize={10} axisLine={false} tickLine={false} />
+                                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
+                                <Bar dataKey="value" fill="#6366f1" radius={[6, 6, 0, 0]} />
+                            </BarChart>
+                        )}
                     </ResponsiveContainer>
                 )}
             </div>
