@@ -95,70 +95,91 @@ export function computeConnectorPoints(fromShape, toShape, routingType = 'bezier
       points: points,
       bezier: false
     };
-  } else if (routingType === 'magic') {
-    // Advanced Orthogonal (Pseudo-A* for obstacle avoidance)
-    // For performance, we'll do a simple bounding-box check to route around the most obvious obstacle
-    // A full A* grid search is too heavy for real-time React render
-    const points = [];
-    points.push(fromPt.x, fromPt.y);
+    } else if (routingType === 'magic') {
+        // Intelligent Manhattan Routing (Manhattan path with obstacle avoidance)
+        const points = [];
+        points.push(fromPt.x, fromPt.y);
 
-    const midX = (fromPt.x + toPt.x) / 2;
-    const midY = (fromPt.y + toPt.y) / 2;
-
-    let useHorizontalExit = (fromPt.side === 'left' || fromPt.side === 'right');
-    
-    // Quick check if mid path hits an obstacle
-    let hitsObstacle = false;
-    let obstacleBox = null;
-    
-    const checkLineObstacle = (x1, y1, x2, y2) => {
-        const minX = Math.min(x1, x2);
-        const maxX = Math.max(x1, x2);
-        const minY = Math.min(y1, y2);
-        const maxY = Math.max(y1, y2);
-        
-        for (const [id, shape] of Object.entries(allShapes)) {
-            if (id === fromShape.id || id === toShape.id) continue;
-            const sx = shape.scaleX || 1;
-            const sy = shape.scaleY || 1;
-            const w = (shape.width || shape.radiusX * 2 || 100) * sx;
-            const h = (shape.height || shape.radiusY * 2 || 100) * sy;
-            const cx = shape.x;
-            const cy = shape.y;
+        const getObstacleAt = (x1, y1, x2, y2) => {
+            const minX = Math.min(x1, x2);
+            const maxX = Math.max(x1, x2);
+            const minY = Math.min(y1, y2);
+            const maxY = Math.max(y1, y2);
             
-            // Check intersection with shape bounding box (inflated by padding)
-            const pad = 20;
-            if (!(maxX < cx - pad || minX > cx + w + pad || maxY < cy - pad || minY > cy + h + pad)) {
-                return { cx, cy, w, h };
+            for (const [id, shape] of Object.entries(allShapes)) {
+                if (id === fromShape.id || id === toShape.id) continue;
+                const sx = shape.scaleX || 1;
+                const sy = shape.scaleY || 1;
+                const w = (shape.width || shape.radiusX * 2 || 100) * sx;
+                const h = (shape.height || shape.radiusY * 2 || 100) * sy;
+                const pad = 30;
+                
+                if (!(maxX < shape.x - pad || minX > shape.x + w + pad || maxY < shape.y - pad || minY > shape.y + h + pad)) {
+                    return { x: shape.x, y: shape.y, w, h };
+                }
+            }
+            return null;
+        };
+
+        // Helper to find a way around an obstacle
+        const routeAround = (start, end, obstacle) => {
+            const midX = (start.x + end.x) / 2;
+            const midY = (start.y + end.y) / 2;
+            
+            // Determine if we should go left/right or up/down
+            const goHorizontal = Math.abs(end.x - start.x) > Math.abs(end.y - start.y);
+            
+            if (goHorizontal) {
+                // Try routing above or below
+                const yAbove = obstacle.y - 40;
+                const yBelow = obstacle.y + obstacle.h + 40;
+                const targetY = Math.abs(yAbove - midY) < Math.abs(yBelow - midY) ? yAbove : yBelow;
+                return [
+                    { x: (start.x + obstacle.x) / 2, y: start.y },
+                    { x: (start.x + obstacle.x) / 2, y: targetY },
+                    { x: (end.x + obstacle.x + obstacle.w) / 2, y: targetY },
+                    { x: (end.x + obstacle.x + obstacle.w) / 2, y: end.y }
+                ];
+            } else {
+                // Try routing left or right
+                const xLeft = obstacle.x - 40;
+                const xRight = obstacle.x + obstacle.w + 40;
+                const targetX = Math.abs(xLeft - midX) < Math.abs(xRight - midX) ? xLeft : xRight;
+                return [
+                    { x: start.x, y: (start.y + obstacle.y) / 2 },
+                    { x: targetX, y: (start.y + obstacle.y) / 2 },
+                    { x: targetX, y: (end.y + obstacle.y + obstacle.h) / 2 },
+                    { x: end.x, y: (end.y + obstacle.y + obstacle.h) / 2 }
+                ];
+            }
+        };
+
+        const midX = (fromPt.x + toPt.x) / 2;
+        const midY = (fromPt.y + toPt.y) / 2;
+        
+        let path = [];
+        // Basic Manhattan midpoints
+        const waypoints = [
+            { x: fromPt.x, y: fromPt.y },
+            { x: midX, y: fromPt.y },
+            { x: midX, y: toPt.y },
+            { x: toPt.x, y: toPt.y }
+        ];
+
+        // Check for obstacles between each waypoint segment
+        for (let i = 0; i < waypoints.length - 1; i++) {
+            const p1 = waypoints[i];
+            const p2 = waypoints[i+1];
+            const obstacle = getObstacleAt(p1.x, p1.y, p2.x, p2.y);
+            
+            if (obstacle) {
+                const detour = routeAround(p1, p2, obstacle);
+                detour.forEach(p => points.push(p.x, p.y));
+            } else {
+                points.push(p2.x, p2.y);
             }
         }
-        return null;
-    };
 
-    if (useHorizontalExit) {
-        obstacleBox = checkLineObstacle(fromPt.x, fromPt.y, midX, fromPt.y) || checkLineObstacle(midX, fromPt.y, midX, toPt.y);
-        if (obstacleBox) {
-            // Route around
-            const yOffset = obstacleBox.cy < midY ? obstacleBox.h + 40 : -40;
-            points.push(midX, fromPt.y);
-            points.push(midX, obstacleBox.cy + yOffset);
-            points.push(toPt.x, obstacleBox.cy + yOffset);
-        } else {
-            points.push(midX, fromPt.y);
-            points.push(midX, toPt.y);
-        }
-    } else {
-        obstacleBox = checkLineObstacle(fromPt.x, fromPt.y, fromPt.x, midY) || checkLineObstacle(fromPt.x, midY, toPt.x, midY);
-        if (obstacleBox) {
-            const xOffset = obstacleBox.cx < midX ? obstacleBox.w + 40 : -40;
-            points.push(fromPt.x, midY);
-            points.push(obstacleBox.cx + xOffset, midY);
-            points.push(obstacleBox.cx + xOffset, toPt.y);
-        } else {
-            points.push(fromPt.x, midY);
-            points.push(toPt.x, midY);
-        }
-    }
 
     points.push(toPt.x, toPt.y);
 

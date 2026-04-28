@@ -758,31 +758,53 @@ function Whiteboard() {
   }, [shapes, selectedId, activeDoc, getRelativePointerPos]);
 
   const handleTransitionTo = useCallback((scene) => {
-    // Phase 3: Magic Move Implementation
-    // We animate the stage AND the individual shapes if their positions are stored in the scene
+    // Phase 1: Cinematic Fly-through Implementation
+    // This adds a "zoom-out -> pan -> zoom-in" effect for a premium feel
     setIsTransitioning(true);
     
     const startPos = { ...stagePos };
     const startScale = stageScale;
-    const duration = 800;
+    
+    // Calculate distance to determine duration (longer distance = slower pan)
+    const dx = scene.x - startPos.x;
+    const dy = scene.y - startPos.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const baseDuration = 1000;
+    const duration = Math.max(baseDuration, Math.min(2500, distance / 2));
+    
     const startTime = Date.now();
 
     const animate = () => {
         const now = Date.now();
         const progress = Math.min(1, (now - startTime) / duration);
-        const ease = t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // easeInOutQuad
+        
+        // Easing: easeInOutCubic for smoother start/end
+        const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
         const e = ease(progress);
 
-        setStagePos({
-            x: startPos.x + (scene.x - startPos.x) * e,
-            y: startPos.y + (scene.y - startPos.y) * e
-        });
-        setStageScale(startScale + (scene.scale - startScale) * e);
+        // Cinematic "Parallax" Scale Effect:
+        // We dip the scale slightly in the middle of the transition to show context
+        const midPointScaleDip = 0.85; // dip to 85% of target
+        const scaleProgress = Math.sin(progress * Math.PI); // 0 at start, 1 at mid, 0 at end
+        
+        // Interpolate position
+        const currentX = startPos.x + (scene.x - startPos.x) * e;
+        const currentY = startPos.y + (scene.y - startPos.y) * e;
+        
+        // Interpolate scale with a slight dip in the middle
+        const targetScale = startScale + (scene.scale - startScale) * e;
+        const cinematicScale = targetScale * (1 - (scaleProgress * 0.15)); // max 15% dip
+
+        setStagePos({ x: currentX, y: currentY });
+        setStageScale(cinematicScale);
         setTransitionProgress(progress);
 
         if (progress < 1) {
             requestAnimationFrame(animate);
         } else {
+            // Ensure we land exactly on target
+            setStagePos({ x: scene.x, y: scene.y });
+            setStageScale(scene.scale);
             setIsTransitioning(false);
             setTransitionProgress(0);
         }
@@ -790,6 +812,7 @@ function Whiteboard() {
 
     requestAnimationFrame(animate);
   }, [stagePos, stageScale]);
+
 
   const handleMouseDown = useCallback((e) => {
     const pointer = stageRef.current.getPointerPosition();
