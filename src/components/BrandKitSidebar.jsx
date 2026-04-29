@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Palette, X, Plus, Trash2, Check, Type, Image as ImageIcon } from 'lucide-react';
+import { Palette, X, Plus, Trash2, Check, Type, Image as ImageIcon, Sparkles } from 'lucide-react';
 
 export default function BrandKitSidebar({ isOpen, onClose, ydoc }) {
     const [brandKit, setBrandKit] = useState({
@@ -38,6 +38,23 @@ export default function BrandKitSidebar({ isOpen, onClose, ydoc }) {
         yBrandKitRef.current.set('colors', newColors);
     };
 
+    const applyToAll = () => {
+        if (!ydoc || brandKit.colors.length === 0) return;
+        const primaryColor = brandKit.colors[0];
+        
+        const yShapes = ydoc.getMap('shapes');
+        const yNotes = ydoc.getMap('stickyNotes');
+        
+        ydoc.transact(() => {
+            yShapes.forEach((shape, id) => {
+                yShapes.set(id, { ...shape, color: primaryColor });
+            });
+            yNotes.forEach((noteMap, id) => {
+                noteMap.set('backgroundColor', primaryColor);
+            });
+        }, 'local');
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -57,10 +74,19 @@ export default function BrandKitSidebar({ isOpen, onClose, ydoc }) {
                 <div className="flex flex-col gap-3">
                     <div className="flex justify-between items-center">
                         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Brand Colors</span>
-                        <label className="p-1 bg-indigo-50 text-indigo-600 rounded-md cursor-pointer hover:bg-indigo-100 transition">
-                            <Plus size={14} />
-                            <input type="color" className="hidden" onChange={(e) => addColor(e.target.value)} />
-                        </label>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={applyToAll}
+                                className="p-1 px-2 bg-indigo-600 text-white rounded-md text-[10px] font-bold flex items-center gap-1 hover:bg-indigo-700 transition shadow-lg shadow-indigo-100"
+                                title="Apply primary color to all items"
+                            >
+                                <Sparkles size={10} /> MAGIC APPLY
+                            </button>
+                            <label className="p-1 bg-indigo-50 text-indigo-600 rounded-md cursor-pointer hover:bg-indigo-100 transition">
+                                <Plus size={14} />
+                                <input type="color" className="hidden" onChange={(e) => addColor(e.target.value)} />
+                            </label>
+                        </div>
                     </div>
                     <div className="grid grid-cols-4 gap-3">
                         {brandKit.colors.map((color, i) => (

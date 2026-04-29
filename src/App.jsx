@@ -20,12 +20,13 @@ import {
   Pencil, Square, CircleIcon, Trash2,
   Undo2, Redo2, RotateCcw, MousePointer2,
   Minus, Plus, Palette, Link, Check, StickyNote, X, Download,
-  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code, Ruler, Grid3X3, BarChart3, Globe, Compass
+  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code, Ruler, Grid3X3, BarChart3, Globe, Compass, Gamepad2
 } from 'lucide-react';
 import useConnectors, { computeConnectorPoints, getShapeEdgePoints } from './hooks/useConnectors.js';
 import CallPanel from './components/CallPanel.jsx';
 import AISidebar from './components/AISidebar.jsx';
 import ScenePanel from './components/ScenePanel.jsx';
+import LayersPanel from './components/LayersPanel.jsx';
 import DynamicBackground from './components/DynamicBackground.jsx';
 import CursorChat from './components/CursorChat.jsx';
 import CanvasImage from './components/CanvasImage.jsx';
@@ -254,6 +255,10 @@ function Whiteboard() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionProgress, setTransitionProgress] = useState(0);
   const [isBrandKitOpen, setIsBrandKitOpen] = useState(false);
+  const [isSandboxMode, setIsSandboxMode] = useState(false);
+  const [isLayersOpen, setIsLayersOpen] = useState(false);
+
+
 
   const currentUserData = useCurrentUser();
   const currentUser = useMemo(() => {
@@ -1104,18 +1109,21 @@ function Whiteboard() {
     
     // Physics Momentum on Drag End
     if (tool === 'select' && selectedId && !isDrawing) {
-        const shape = stageRef.current.findOne('#' + selectedId);
-        if (shape) {
-            const dragNode = shape;
-            const velocity = { vx: dragNode.x() - (dragNode._lastX || dragNode.x()), vy: dragNode.y() - (dragNode._lastY || dragNode.y()) };
-            if (Math.abs(velocity.vx) > 1 || Math.abs(velocity.vy) > 1) {
+        const node = stageRef.current.findOne('#' + selectedId);
+        if (node) {
+            // Calculate velocity from the difference between current position and the position recorded in the last frame
+            const vx = node.x() - (node._lastX || node.x());
+            const vy = node.y() - (node._lastY || node.y());
+            
+            if (Math.abs(vx) > 0.5 || Math.abs(vy) > 0.5) {
                 setMomentumShapes(prev => ({
                     ...prev,
-                    [selectedId]: { vx: velocity.vx * 0.8, vy: velocity.vy * 0.8 }
+                    [selectedId]: { vx: vx * 0.9, vy: vy * 0.9 }
                 }));
             }
         }
     }
+
 
     setIsDrawing(false);
     setCurrentShape(null);
@@ -1312,8 +1320,22 @@ function Whiteboard() {
       yShapes.set(id, { ...prev, x: e.target.x(), y: e.target.y() });
     }, 'local');
     
+    // Cleanup internal tracking
+    delete e.target._lastX;
+    delete e.target._lastY;
+
     recalculateForShape(id, shapes);
   }, [shapes, recalculateForShape]);
+
+  const handleShapeDragMove = useCallback((id, e) => {
+      const node = e.target;
+      // Track position for momentum calculation
+      node._lastX = node._lastX_prev || node.x();
+      node._lastY = node._lastY_prev || node.y();
+      node._lastX_prev = node.x();
+      node._lastY_prev = node.y();
+  }, []);
+
 
   const handleShapeTransformEnd = useCallback((id, e) => {
     const node = e.target;
@@ -1411,7 +1433,10 @@ function Whiteboard() {
   };
 
   const renderedShapes = useMemo(() => {
-    return Object.entries(shapes).map(([id, shape]) => {
+    return Object.entries(shapes)
+      .sort(([, a], [, b]) => (a.zIndex || 0) - (b.zIndex || 0))
+      .map(([id, shape]) => {
+        if (shape.visible === false) return null;
       if (!shape) return null;
       const isSelected = selectedId === id;
       const commonProps = {
@@ -1427,10 +1452,12 @@ function Whiteboard() {
         listening: tool === 'select',
         onClick: () => tool === 'select' && setSelectedId(id),
         onTap: () => tool === 'select' && setSelectedId(id),
+        onDragMove: (e) => handleShapeDragMove(id, e),
         onDragEnd: (e) => handleShapeDragEnd(id, e),
         onTransformEnd: (e) => handleShapeTransformEnd(id, e),
         onDblClick: () => handleDblClick(id, shape),
       };
+
 
       switch (shape.type) {
         case 'line':
@@ -1704,7 +1731,7 @@ function Whiteboard() {
 
   return (
     <div className="canvas-container relative w-full h-full overflow-hidden bg-slate-50">
-      <DynamicBackground />
+      <DynamicBackground ydoc={activeDoc} />
       
       <div 
         className={`relative w-full h-full ${spaceHeld || isPanning ? 'panning' : ''} animate-fade-in`}
@@ -1780,7 +1807,27 @@ function Whiteboard() {
             </div>
           </motion.div>
         )}
+      <AnimatePresence>
+        {isLayersOpen && (
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="fixed top-20 left-6 z-[1001]"
+          >
+            <LayersPanel 
+              isOpen={isLayersOpen}
+              onClose={() => setIsLayersOpen(false)}
+              shapes={shapes}
+              stickyNotes={stickyNotes}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              ydoc={activeDoc}
+            />
+          </motion.div>
+        )}
       </AnimatePresence>
+
 
       <TemplatesModal 
         isOpen={isTemplatesOpen} 
@@ -1865,11 +1912,25 @@ function Whiteboard() {
             <Sparkles size={18} className={isHeatmapEnabled ? 'text-orange-400' : ''} />
           </button>
           <button 
+            className={`tool-btn ${isLayersOpen ? 'active' : ''}`} 
+            onClick={() => setIsLayersOpen(!isLayersOpen)} 
+            title="Toggle Layers Panel"
+          >
+            <Layers size={18} className={isLayersOpen ? "text-indigo-400" : ""} />
+          </button>
+          <button 
             className={`tool-btn ${isSketchMode ? 'active' : ''}`} 
             onClick={() => setIsSketchMode(!isSketchMode)} 
             title="Toggle Sketch Mode"
           >
             <Highlighter size={18} className={isSketchMode ? "text-yellow-400" : ""} />
+          </button>
+          <button 
+            className={`tool-btn ${isSandboxMode ? 'active' : ''}`} 
+            onClick={() => setIsSandboxMode(!isSandboxMode)} 
+            title="Toggle Sandbox Mode (Physics Playground)"
+          >
+            <Gamepad2 size={18} className={isSandboxMode ? "text-red-400 animate-bounce" : ""} />
           </button>
         </div>
         <div className="toolbar-divider" />
@@ -2171,9 +2232,11 @@ function Whiteboard() {
       <PhysicsWorld 
         shapes={shapes}
         stickyNotes={stickyNotes}
-        isEnabled={isPhysicsEnabled}
+        isEnabled={isPhysicsEnabled || isSandboxMode}
+        isSandbox={isSandboxMode}
         onUpdate={handlePhysicsUpdate}
       />
+
 
       <ActivityHeatmap 
         isOpen={isHeatmapEnabled}

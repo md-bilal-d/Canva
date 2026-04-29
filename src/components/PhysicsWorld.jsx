@@ -1,41 +1,81 @@
 import React, { useEffect, useRef } from 'react';
 import Matter from 'matter-js';
 
-export default function PhysicsWorld({ shapes, stickyNotes, onUpdate, isEnabled }) {
+export default function PhysicsWorld({ shapes, stickyNotes, onUpdate, isEnabled, isSandbox }) {
   const engineRef = useRef(Matter.Engine.create());
-  const renderRef = useRef(null);
-  const runnerRef = useRef(Matter.Runner.create());
   const bodiesMap = useRef(new Map());
 
   useEffect(() => {
+    const engine = engineRef.current;
+    
     if (!isEnabled) {
-      // Clear bodies if disabled
-      Matter.Composite.clear(engineRef.current.world);
+      Matter.Composite.clear(engine.world);
       bodiesMap.current.clear();
       return;
     }
 
-    const { Engine, World, Bodies, Composite } = Matter;
-    const world = engineRef.current.world;
+    const { World, Bodies, Composite } = Matter;
+    const world = engine.world;
 
-    // Create a floor
-    const ground = Bodies.rectangle(window.innerWidth / 2, window.innerHeight + 50, window.innerWidth * 10, 100, { isStatic: true });
-    Composite.add(world, ground);
+    // Configure gravity based on sandbox mode
+    world.gravity.y = isSandbox ? 1 : 0;
+
+    // Create boundaries (Walls) to keep things inside the viewport
+    const thickness = 1000;
+    const walls = [
+        // Ground
+        Bodies.rectangle(window.innerWidth / 2, window.innerHeight + thickness / 2, window.innerWidth * 10, thickness, { isStatic: true }),
+        // Ceiling
+        Bodies.rectangle(window.innerWidth / 2, -thickness / 2, window.innerWidth * 10, thickness, { isStatic: true }),
+        // Left
+        Bodies.rectangle(-thickness / 2, window.innerHeight / 2, thickness, window.innerHeight * 10, { isStatic: true }),
+        // Right
+        Bodies.rectangle(window.innerWidth + thickness / 2, window.innerHeight / 2, thickness, window.innerHeight * 10, { isStatic: true })
+    ];
+    Composite.add(world, walls);
 
     // Sync shapes and sticky notes to physics bodies
     const syncBodies = () => {
       const currentIds = new Set();
 
-      // Shapes
-      Object.values(shapes).forEach(shape => {
-        currentIds.add(shape.id);
-        if (!bodiesMap.current.has(shape.id)) {
-          const body = Bodies.rectangle(shape.x + (shape.width || 100) / 2, shape.y + (shape.height || 100) / 2, shape.width || 100, shape.height || 100, {
-             restitution: 0.5,
-             friction: 0.1
-          });
-          body.label = shape.id;
-          bodiesMap.current.set(shape.id, body);
+      // Combine shapes and sticky notes for physics
+      const allItems = [
+          ...Object.values(shapes || {}).map(s => ({ ...s, itemType: 'shape' })),
+          ...Object.entries(stickyNotes || {}).map(([id, n]) => ({ 
+              id, 
+              itemType: 'note', 
+              x: n.get('x'), 
+              y: n.get('y'), 
+              width: 200, 
+              height: 150 
+          }))
+      ];
+
+      allItems.forEach(item => {
+        currentIds.add(item.id);
+        if (!bodiesMap.current.has(item.id)) {
+          const w = item.width || 100;
+          const h = item.height || 100;
+          
+          let body;
+          if (item.type === 'circle') {
+              body = Bodies.circle(item.x, item.y, (item.radiusX || 50), {
+                  restitution: 0.6,
+                  friction: 0.1,
+                  frictionAir: isSandbox ? 0.01 : 0.05
+              });
+          } else {
+              body = Bodies.rectangle(item.x + w/2, item.y + h/2, w, h, {
+                  restitution: 0.5,
+                  friction: 0.1,
+                  frictionAir: isSandbox ? 0.01 : 0.05,
+                  chamfer: { radius: 10 }
+              });
+          }
+          
+          body.label = item.id;
+          body.itemType = item.itemType;
+          bodiesMap.current.set(item.id, body);
           Composite.add(world, body);
         }
       });
@@ -52,33 +92,38 @@ export default function PhysicsWorld({ shapes, stickyNotes, onUpdate, isEnabled 
     syncBodies();
 
     // Physics Loop
+    let frameId;
     const update = () => {
       if (!isEnabled) return;
-      Matter.Engine.update(engineRef.current, 1000 / 60);
+      Matter.Engine.update(engine, 1000 / 60);
       
       const updates = [];
       bodiesMap.current.forEach((body, id) => {
         if (!body.isStatic) {
           updates.push({
             id,
-            x: body.position.x - (shapes[id]?.width || 100) / 2,
-            y: body.position.y - (shapes[id]?.height || 100) / 2,
-            rotation: body.angle * (180 / Math.PI)
+            type: body.itemType,
+            x: body.position.x - (body.itemType === 'shape' ? (shapes[id]?.width || 100) / 2 : 100),
+            y: body.position.y - (body.itemType === 'shape' ? (shapes[id]?.height || 100) / 2 : 75),
+            angle: body.angle
           });
         }
       });
 
       if (updates.length > 0) {
-        onUpdate(updates);
+        onUpdate({ items: updates });
       }
       
-      requestAnimationFrame(update);
+      frameId = requestAnimationFrame(update);
     };
 
-    const animId = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(animId);
+    frameId = requestAnimationFrame(update);
+    return () => {
+        cancelAnimationFrame(frameId);
+        Matter.Composite.clear(world);
+    };
 
-  }, [isEnabled, shapes, stickyNotes]);
+  }, [isEnabled, isSandbox, shapes, stickyNotes, onUpdate]);
 
-  return null; // Headless component
+  return null;
 }
