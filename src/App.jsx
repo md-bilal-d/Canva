@@ -20,7 +20,7 @@ import {
   Pencil, Square, CircleIcon, Trash2,
   Undo2, Redo2, RotateCcw, MousePointer2,
   Minus, Plus, Palette, Link, Check, StickyNote, X, Download,
-  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code, Ruler, Grid3X3, BarChart3, Globe, Compass, Gamepad2
+  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code, Ruler, Grid3X3, BarChart3, Globe, Compass, Gamepad2, Layers, MoveRight, Lock, Unlock
 } from 'lucide-react';
 import useConnectors, { computeConnectorPoints, getShapeEdgePoints } from './hooks/useConnectors.js';
 import CallPanel from './components/CallPanel.jsx';
@@ -841,6 +841,18 @@ function Whiteboard() {
 
     if (tool === 'select') {
       const clickedOnEmpty = e.target === e.target.getStage();
+      const clickedOnShape = !clickedOnEmpty;
+      
+      // If clicked on a locked shape, ignore
+      if (clickedOnShape) {
+          const shapeId = e.target.id() || (e.target.getParent() && e.target.getParent().id());
+          const shape = shapes[shapeId];
+          if (shape && shape.locked) {
+              setSelectedId(null);
+              return;
+          }
+      }
+
       if (clickedOnEmpty) {
         setSelectedId(null);
       }
@@ -889,19 +901,21 @@ function Whiteboard() {
     } else if (tool === 'portal') {
       // Create a portal that links to a far-away part of the canvas by default
       const id = 'portal-' + Date.now();
-      activeDoc.transact(() => {
-          yShapesRef.current.set(id, {
+      const yShapes = yShapesRef.current;
+      yShapes.doc.transact(() => {
+          yShapes.set(id, {
               id,
               type: 'portal',
               x: pos.x,
               y: pos.y,
-              name: 'New Portal',
-              targetX: pos.x + 2000, // Teleport 2000px away
-              targetY: pos.y + 2000,
-              targetScale: 1
+              name: 'New Dimension',
+              targetX: pos.x + 1500, // Teleport away
+              targetY: pos.y + 1500,
+              targetScale: 1.2
           });
       }, 'local');
       setIsDrawing(false);
+      setTool('select');
       return;
     }
   }, [tool, color, strokeWidth, spaceHeld, stagePos, getRelativePointerPos]);
@@ -1448,14 +1462,14 @@ function Whiteboard() {
         scaleY: shape.scaleY || 1,
         stroke: shape.color,
         strokeWidth: shape.strokeWidth,
-        draggable: tool === 'select',
-        listening: tool === 'select',
-        onClick: () => tool === 'select' && setSelectedId(id),
-        onTap: () => tool === 'select' && setSelectedId(id),
-        onDragMove: (e) => handleShapeDragMove(id, e),
-        onDragEnd: (e) => handleShapeDragEnd(id, e),
-        onTransformEnd: (e) => handleShapeTransformEnd(id, e),
-        onDblClick: () => handleDblClick(id, shape),
+        draggable: tool === 'select' && !shape.locked,
+        listening: !shape.locked || tool === 'select',
+        onClick: () => tool === 'select' && !shape.locked && setSelectedId(id),
+        onTap: () => tool === 'select' && !shape.locked && setSelectedId(id),
+        onDragMove: (e) => !shape.locked && handleShapeDragMove(id, e),
+        onDragEnd: (e) => !shape.locked && handleShapeDragEnd(id, e),
+        onTransformEnd: (e) => !shape.locked && handleShapeTransformEnd(id, e),
+        onDblClick: () => !shape.locked && handleDblClick(id, shape),
       };
 
 
@@ -1659,6 +1673,7 @@ function Whiteboard() {
               isSelected={id === selectedId}
               onNavigate={handleTransitionTo}
               draggable={tool === 'select'}
+              draggable={tool === 'select' && !shape.locked}
             />
           );
         default: return null;
@@ -1666,66 +1681,42 @@ function Whiteboard() {
     });
   }, [shapes, tool, selectedId, handleShapeDragEnd, activeDoc, currentUser, stackUsers]);
 
-  const handlePhysicsUpdate = useCallback((engineData) => {
-    // Throttled sync to avoid Yjs overhead
+  const handlePhysicsUpdate = useCallback((data) => {
+    const yShapes = yShapesRef.current;
+    const yNotes = yNotesRef.current;
+    if (!yShapes || !yNotes) return;
+
+    // Throttle sync to avoid Yjs overhead
     const now = Date.now();
     if (now - lastPhysicsSyncRef.current < 33) return; // ~30fps sync
     lastPhysicsSyncRef.current = now;
 
-    // Direct state updates for Konva performance
-    const { items } = engineData;
-    activeDoc.transact(() => {
-      items.forEach(item => {
-        if (item.type === 'shape' && yShapesRef.current?.has(item.id)) {
-           const shape = yShapesRef.current.get(item.id);
-           shape.set('x', item.x);
-           shape.set('y', item.y);
-           shape.set('rotation', item.angle * (180 / Math.PI));
-        } else if (item.type === 'note' && yNotesRef.current?.has(item.id)) {
-           const note = yNotesRef.current.get(item.id);
-           note.set('x', item.x);
-           note.set('y', item.y);
+    yShapes.doc.transact(() => {
+      data.items.forEach(item => {
+        if (item.type === 'shape') {
+          const existing = yShapes.get(item.id);
+          if (existing) {
+            yShapes.set(item.id, { 
+                ...existing, 
+                x: item.x, 
+                y: item.y, 
+                rotation: (item.angle * 180) / Math.PI,
+                velocity: item.velocity,
+                angularVelocity: item.angularVelocity
+            });
+          }
+        } else if (item.type === 'note') {
+          const noteMap = yNotes.get(item.id);
+          if (noteMap) {
+            noteMap.set('x', item.x);
+            noteMap.set('y', item.y);
+            noteMap.set('rotation', (item.angle * 180) / Math.PI);
+            noteMap.set('velocity', item.velocity);
+          }
         }
       });
-    });
-  }, [activeDoc]);
-
-  const handleTransitionTo = useCallback((scene) => {
-    const startX = stagePos.x;
-    const startY = stagePos.y;
-    const startScale = stageScale;
-    const targetX = scene.x;
-    const targetY = scene.y;
-    const targetScale = scene.scale;
-
-    let startTime = null;
-    const duration = 1000;
-
-    const animate = (time) => {
-      if (!startTime) startTime = time;
-      const progress = Math.min((time - startTime) / duration, 1);
-      
-      // Premium easing: Slow start, fast middle, bouncy end (cubic-bezierish)
-      const eased = progress < 0.5 
-        ? 4 * progress * progress * progress 
-        : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-
-      // Fly-through effect: zoom out slightly in the middle
-      const zoomOutFactor = 0.85;
-      const currentScale = progress < 0.5
-        ? startScale + (startScale * zoomOutFactor - startScale) * (progress * 2)
-        : (startScale * zoomOutFactor) + (targetScale - (startScale * zoomOutFactor)) * ((progress - 0.5) * 2);
-
-      setStagePos({
-        x: startX + (targetX - startX) * eased,
-        y: startY + (targetY - startY) * eased
-      });
-      setStageScale(currentScale);
-
-      if (progress < 1) requestAnimationFrame(animate);
-    };
-    requestAnimationFrame(animate);
-  }, [stagePos, stageScale]);
+    }, 'local');
+  }, []);
 
   const zoomPercent = Math.round(stageScale * 100);
 
@@ -1807,6 +1798,7 @@ function Whiteboard() {
             </div>
           </motion.div>
         )}
+      </AnimatePresence>
       <AnimatePresence>
         {isLayersOpen && (
           <motion.div
@@ -2608,7 +2600,7 @@ function Whiteboard() {
         setTool={setTool}
         onAIAction={(open) => setIsAIOpen(open)}
       />
-     </div>
+      </div>
     </div>
   );
 }

@@ -95,18 +95,28 @@ export default function PhysicsWorld({ shapes, stickyNotes, onUpdate, isEnabled,
     let frameId;
     const update = () => {
       if (!isEnabled) return;
+      
+      // Fixed time step for stability
       Matter.Engine.update(engine, 1000 / 60);
       
       const updates = [];
       bodiesMap.current.forEach((body, id) => {
         if (!body.isStatic) {
-          updates.push({
-            id,
-            type: body.itemType,
-            x: body.position.x - (body.itemType === 'shape' ? (shapes[id]?.width || 100) / 2 : 100),
-            y: body.position.y - (body.itemType === 'shape' ? (shapes[id]?.height || 100) / 2 : 75),
-            angle: body.angle
-          });
+          // Check if body is actually moving to avoid unnecessary updates
+          const speed = Math.sqrt(body.velocity.x ** 2 + body.velocity.y ** 2);
+          const angularSpeed = Math.abs(body.angularVelocity);
+          
+          if (speed > 0.01 || angularSpeed > 0.01) {
+            updates.push({
+              id,
+              type: body.itemType,
+              x: body.position.x - (body.itemType === 'shape' ? (shapes[id]?.width || 100) / 2 : 100),
+              y: body.position.y - (body.itemType === 'shape' ? (shapes[id]?.height || 100) / 2 : 75),
+              angle: body.angle,
+              velocity: { x: body.velocity.x, y: body.velocity.y },
+              angularVelocity: body.angularVelocity
+            });
+          }
         }
       });
 
@@ -117,9 +127,24 @@ export default function PhysicsWorld({ shapes, stickyNotes, onUpdate, isEnabled,
       frameId = requestAnimationFrame(update);
     };
 
+    // Collision Impact Detection
+    Matter.Events.on(engine, 'collisionStart', (event) => {
+        if (!isEnabled) return;
+        event.pairs.forEach((pair) => {
+            const bodyA = pair.bodyA;
+            const bodyB = pair.bodyB;
+            
+            // Trigger impact effect logic (could be passed via props)
+            if (pair.collision.depth > 2) {
+                // High impact
+            }
+        });
+    });
+
     frameId = requestAnimationFrame(update);
     return () => {
         cancelAnimationFrame(frameId);
+        Matter.Events.off(engine);
         Matter.Composite.clear(world);
     };
 

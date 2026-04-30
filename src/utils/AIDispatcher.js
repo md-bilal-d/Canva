@@ -236,6 +236,38 @@ export function insertDesignFromAI(ydoc, currentViewPos, scale, intent, params) 
           }
           break;
       }
+      case 'vibe': {
+          const yBrand = ydoc.getMap('brandKit');
+          const vibes = {
+              'cyberpunk': ['#00f2ff', '#ff00ff', '#1e1b4b'],
+              'minimalist': ['#f8fafc', '#1e293b', '#64748b'],
+              'retro 80s': ['#ff71ce', '#01cdfe', '#05ffa1'],
+              'nature': ['#10b981', '#064e3b', '#fef3c7'],
+              'corporate': ['#2563eb', '#1e40af', '#f1f5f9']
+          };
+          const selectedVibe = vibes[params.prompt.toLowerCase()] || vibes['minimalist'];
+          yBrand.set('colors', selectedVibe);
+          break;
+      }
+      case 'applyBrandKit': {
+          const yBrand = ydoc.getMap('brandKit');
+          const colors = yBrand.get('colors') || ['#6366f1', '#ec4899', '#f59e0b'];
+          
+          yShapes.forEach((val, key) => {
+              // Apply colors to shapes (circles, rects, etc.)
+              if (val.type === 'rect' || val.type === 'circle') {
+                  yShapes.set(key, {
+                      ...val,
+                      color: colors[Math.floor(Math.random() * colors.length)]
+                  });
+              }
+          });
+          
+          yNotes.forEach((val, key) => {
+              val.set('backgroundColor', colors[Math.floor(Math.random() * colors.length)]);
+          });
+          break;
+      }
       default:
         console.warn('Unknown AI intent:', intent);
     }

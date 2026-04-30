@@ -165,6 +165,16 @@ export default function AISidebar({ isOpen, onClose, ydoc, viewportCenter, stage
                 </button>
                 <button 
                   onClick={() => {
+                    insertDesignFromAI(ydoc, viewportCenter, stageScale, 'applyBrandKit', {});
+                    onClose();
+                  }}
+                  className="flex items-center gap-2 text-[11px] bg-white text-gray-700 p-2 rounded-xl hover:shadow-md transition border border-gray-100 font-bold"
+                >
+                    <Sparkles size={14} className="text-indigo-600" />
+                    Magic Apply
+                </button>
+                <button 
+                  onClick={() => {
                     insertDesignFromAI(ydoc, viewportCenter, stageScale, 'smartAlign', {});
                     onClose();
                   }}

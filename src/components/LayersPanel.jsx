@@ -45,6 +45,37 @@ export default function LayersPanel({ isOpen, onClose, shapes, stickyNotes, sele
     }, 'local');
   };
 
+  const toggleLock = (id, itemType) => {
+    const yMap = itemType === 'shape' ? ydoc.getMap('shapes') : ydoc.getMap('stickyNotes');
+    const item = yMap.get(id);
+    if (!item) return;
+
+    ydoc.transact(() => {
+        if (itemType === 'shape') {
+            yMap.set(id, { ...item, locked: !item.locked });
+        } else {
+            item.set('locked', !item.get('locked'));
+        }
+    }, 'local');
+  };
+
+  const moveToExtreme = (id, direction, itemType) => {
+    const yMap = itemType === 'shape' ? ydoc.getMap('shapes') : ydoc.getMap('stickyNotes');
+    const item = yMap.get(id);
+    if (!item) return;
+
+    const zIndexes = allItems.map(i => i.zIndex || 0);
+    const extreme = direction === 'front' ? Math.max(...zIndexes, 0) + 1 : Math.min(...zIndexes, 0) - 1;
+
+    ydoc.transact(() => {
+        if (itemType === 'shape') {
+            yMap.set(id, { ...item, zIndex: extreme });
+        } else {
+            item.set('zIndex', extreme);
+        }
+    }, 'local');
+  };
+
   const getIcon = (type) => {
     switch (type) {
       case 'rect': return <Box size={14} />;
@@ -57,11 +88,11 @@ export default function LayersPanel({ isOpen, onClose, shapes, stickyNotes, sele
   };
 
   return (
-    <div className="absolute left-6 top-20 w-64 bg-white/95 backdrop-blur-xl border border-gray-200 rounded-2xl shadow-2xl z-[1001] flex flex-col overflow-hidden animate-in slide-in-from-left-4 duration-300">
+    <div className="absolute left-6 top-20 w-72 bg-white/95 backdrop-blur-xl border border-gray-200 rounded-2xl shadow-2xl z-[1001] flex flex-col overflow-hidden animate-in slide-in-from-left-4 duration-300">
       <div className="p-4 border-b bg-gray-50/50 flex justify-between items-center">
         <h3 className="font-bold text-gray-800 flex items-center gap-2 text-sm">
           <Layers size={16} className="text-indigo-600" />
-          Layers
+          Layer Management
         </h3>
         <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded-full text-gray-400 transition">
           <X size={14} />
@@ -85,25 +116,39 @@ export default function LayersPanel({ isOpen, onClose, shapes, stickyNotes, sele
                 <div className={`text-[11px] font-bold truncate ${selectedId === item.id ? 'text-indigo-900' : 'text-gray-700'}`}>
                     {item.name || item.label || item.type || 'Unnamed Layer'}
                 </div>
-                <div className="text-[9px] text-gray-400 font-medium">Z-Index: {item.zIndex || 0}</div>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[9px] text-gray-400 font-medium bg-gray-100 px-1.5 py-0.5 rounded">Z: {item.zIndex || 0}</span>
+                    {item.locked && <Lock size={10} className="text-amber-500" />}
+                    {item.visible === false && <EyeOff size={10} className="text-red-400" />}
+                </div>
             </div>
 
             <div className={`flex items-center gap-1 transition-opacity ${selectedId === item.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                <div className="flex flex-col">
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); moveToExtreme(item.id, 'front', item.itemType); }}
+                        className="p-0.5 hover:bg-white rounded text-gray-300 hover:text-indigo-600"
+                        title="Bring to Front"
+                    >
+                        <ChevronUp size={10} strokeWidth={3} />
+                    </button>
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); moveToExtreme(item.id, 'back', item.itemType); }}
+                        className="p-0.5 hover:bg-white rounded text-gray-300 hover:text-indigo-600"
+                        title="Send to Back"
+                    >
+                        <ChevronDown size={10} strokeWidth={3} />
+                    </button>
+                </div>
                 <button 
-                    onClick={(e) => { e.stopPropagation(); updateZIndex(item.id, 1, item.itemType); }}
-                    className="p-1 hover:bg-white rounded text-gray-400 hover:text-indigo-600"
+                    onClick={(e) => { e.stopPropagation(); toggleLock(item.id, item.itemType); }}
+                    className={`p-1.5 hover:bg-white rounded ${item.locked ? 'text-amber-500' : 'text-gray-400 hover:text-amber-600'}`}
                 >
-                    <ChevronUp size={12} />
-                </button>
-                <button 
-                    onClick={(e) => { e.stopPropagation(); updateZIndex(item.id, -1, item.itemType); }}
-                    className="p-1 hover:bg-white rounded text-gray-400 hover:text-indigo-600"
-                >
-                    <ChevronDown size={12} />
+                    {item.locked ? <Lock size={12} /> : <Unlock size={12} />}
                 </button>
                 <button 
                     onClick={(e) => { e.stopPropagation(); toggleVisibility(item.id, item.itemType); }}
-                    className={`p-1 hover:bg-white rounded ${item.visible === false ? 'text-red-500' : 'text-gray-400 hover:text-indigo-600'}`}
+                    className={`p-1.5 hover:bg-white rounded ${item.visible === false ? 'text-red-500' : 'text-gray-400 hover:text-indigo-600'}`}
                 >
                     {item.visible === false ? <EyeOff size={12} /> : <Eye size={12} />}
                 </button>
