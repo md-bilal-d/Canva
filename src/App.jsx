@@ -51,6 +51,15 @@ import FrameShape from './components/FrameShape.jsx';
 import PortalShape from './components/PortalShape.jsx';
 import BrandKitSidebar from './components/BrandKitSidebar.jsx';
 import { calculateLayoutUpdates, LAYOUT_TYPES } from './utils/LayoutEngine';
+import ThemeToggle from './components/ThemeToggle.jsx';
+import TimerWidget from './components/TimerWidget.jsx';
+import AnalyticsPanel from './components/AnalyticsPanel.jsx';
+import ShareModal from './components/ShareModal.jsx';
+import useTheme from './hooks/useTheme.js';
+import useSharedTimer from './hooks/useSharedTimer.js';
+import useAnalytics from './hooks/useAnalytics.js';
+import useBoardSettings from './hooks/useBoardSettings.js';
+import { Clock, Users } from 'lucide-react';
 import './index.css';
 
 // --- Server URL ---
@@ -257,7 +266,9 @@ function Whiteboard() {
   const [isBrandKitOpen, setIsBrandKitOpen] = useState(false);
   const [isSandboxMode, setIsSandboxMode] = useState(false);
   const [isLayersOpen, setIsLayersOpen] = useState(false);
-
+  const [isTimerOpen, setIsTimerOpen] = useState(false);
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
 
 
   const currentUserData = useCurrentUser();
@@ -370,6 +381,11 @@ function Whiteboard() {
   
   const { mentionCount, clearMentions } = useMentions(activeDoc, currentUser.name);
   const { unreadCount, notifications, markRead, markAllRead } = useNotifications(socketRef.current, currentUser.id);
+
+  const { theme, toggleTheme, isDark } = useTheme();
+  const timerProps = useSharedTimer(activeDoc, true);
+  const { stats, loading: analyticsLoading } = useAnalytics(roomId);
+  const { settings, updateVisibility, inviteMember, removeMember, loading: settingsLoading } = useBoardSettings(roomId);
 
   useEffect(() => {
     document.title = `Whiteboard — ${roomId}`;
@@ -2059,7 +2075,28 @@ function Whiteboard() {
         </div>
         <div className="toolbar-divider" />
         <div className="toolbar-section">
+          <span className="toolbar-label">Features</span>
+          <button 
+            className={`tool-btn ${isTimerOpen ? 'active' : ''}`} 
+            onClick={() => setIsTimerOpen(!isTimerOpen)} 
+            title="Collaborative Timer"
+          >
+            <Clock size={18} className={isTimerOpen ? "text-blue-500" : ""} />
+          </button>
+          <button 
+            className={`tool-btn ${isAnalyticsOpen ? 'active' : ''}`} 
+            onClick={() => setIsAnalyticsOpen(!isAnalyticsOpen)} 
+            title="Board Analytics"
+          >
+            <BarChart3 size={18} className={isAnalyticsOpen ? "text-indigo-500" : ""} />
+          </button>
+        </div>
+        <div className="toolbar-divider" />
+        <div className="toolbar-section">
           <span className="toolbar-label">Share</span>
+          <button className={`tool-btn ${isShareOpen ? 'active' : ''}`} onClick={() => setIsShareOpen(true)} title="Share Settings">
+            <Users size={18} className={isShareOpen ? "text-blue-500" : ""} />
+          </button>
           <button className="tool-btn" onClick={handleCopyLink} title="Copy Link">
             {copied ? <Check size={18} color="#22c55e" /> : <Link size={18} />}
           </button>
@@ -2135,6 +2172,9 @@ function Whiteboard() {
       </div>
 
       <div className="connection-status animate-fade-in" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'transparent', boxShadow: 'none', right: '1.5rem', top: '1.5rem', padding: 0 }}>
+        <div style={{ background: '#0f172a', borderRadius: '12px', padding: '2px', display: 'flex' }}>
+          <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', background: 'white', padding: '8px 16px', borderRadius: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9', backdropFilter: 'blur(10px)' }}>
           <div className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
           <span className="status-text" style={{ marginRight: 0 }}>{connected ? 'Live' : 'Offline'}</span>
@@ -2601,6 +2641,30 @@ function Whiteboard() {
         onAIAction={(open) => setIsAIOpen(open)}
       />
       </div>
+
+      {isTimerOpen && (
+        <TimerWidget 
+          {...timerProps} 
+          onClose={() => setIsTimerOpen(false)} 
+        />
+      )}
+
+      <AnalyticsPanel 
+        isOpen={isAnalyticsOpen} 
+        onClose={() => setIsAnalyticsOpen(false)} 
+        stats={stats} 
+        loading={analyticsLoading} 
+      />
+
+      <ShareModal 
+        isOpen={isShareOpen} 
+        onClose={() => setIsShareOpen(false)} 
+        settings={settings} 
+        onUpdateVisibility={updateVisibility} 
+        onInviteMember={inviteMember} 
+        onRemoveMember={removeMember} 
+        loading={settingsLoading} 
+      />
     </div>
   );
 }
