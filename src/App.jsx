@@ -55,6 +55,7 @@ import ThemeToggle from './components/ThemeToggle.jsx';
 import TimerWidget from './components/TimerWidget.jsx';
 import AnalyticsPanel from './components/AnalyticsPanel.jsx';
 import ShareModal from './components/ShareModal.jsx';
+import CommandPalette from './components/CommandPalette.jsx';
 import useTheme from './hooks/useTheme.js';
 import useSharedTimer from './hooks/useSharedTimer.js';
 import useAnalytics from './hooks/useAnalytics.js';
@@ -269,6 +270,7 @@ function Whiteboard() {
   const [isTimerOpen, setIsTimerOpen] = useState(false);
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
 
   const currentUserData = useCurrentUser();
@@ -586,6 +588,12 @@ function Whiteboard() {
       if (e.key === '/' && !isChatting) {
         e.preventDefault();
         setIsChatting(true);
+      }
+
+      // Command Palette Toggle
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
       }
     };
 
@@ -1191,6 +1199,58 @@ function Whiteboard() {
     frameId = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frameId);
   }, [shapes]);
+
+
+  const handleCommand = useCallback((cmd) => {
+    switch (cmd.action) {
+      case 'setTool':
+        setTool(cmd.value);
+        break;
+      case 'undo':
+        undoManagerRef.current?.undo();
+        break;
+      case 'redo':
+        undoManagerRef.current?.redo();
+        break;
+      case 'clear':
+        handleClear();
+        break;
+      case 'export':
+        handleExport();
+        break;
+      case 'copyLink':
+        handleCopyLink();
+        break;
+      case 'togglePanel':
+        switch (cmd.value) {
+          case 'ai': setIsAIOpen(!isAIOpen); break;
+          case 'templates': setIsTemplatesOpen(!isTemplatesOpen); break;
+          case 'scenes': setIsScenesOpen(!isScenesOpen); break;
+          case 'layers': setIsLayersOpen(!isLayersOpen); break;
+          case 'timer': setIsTimerOpen(!isTimerOpen); break;
+          case 'analytics': setIsAnalyticsOpen(!isAnalyticsOpen); break;
+          case 'share': setIsShareOpen(!isShareOpen); break;
+          case 'call': setIsCallOpen(!isCallOpen); break;
+          case 'code': setIsCodeExportOpen(!isCodeExportOpen); break;
+          case 'brandkit': setIsBrandKitOpen(!isBrandKitOpen); break;
+        }
+        break;
+      case 'toggle':
+        switch (cmd.value) {
+          case '3d': setIs3DEnabled(!is3DEnabled); break;
+          case 'physics': setIsPhysicsEnabled(!isPhysicsEnabled); break;
+          case 'heatmap': setIsHeatmapEnabled(!isHeatmapEnabled); break;
+          case 'sketch': setIsSketchMode(!isSketchMode); break;
+          case 'sandbox': setIsSandboxMode(!isSandboxMode); break;
+          case 'grid': setIsGridEnabled(!isGridEnabled); break;
+        }
+        break;
+    }
+  }, [
+    handleClear, handleExport, handleCopyLink,
+    isAIOpen, isTemplatesOpen, isScenesOpen, isLayersOpen, isTimerOpen, isAnalyticsOpen, isShareOpen, isCallOpen, isCodeExportOpen, isBrandKitOpen,
+    is3DEnabled, isPhysicsEnabled, isHeatmapEnabled, isSketchMode, isSandboxMode, isGridEnabled
+  ]);
 
 
   const handleClear = useCallback(() => {
@@ -2664,6 +2724,12 @@ function Whiteboard() {
         onInviteMember={inviteMember} 
         onRemoveMember={removeMember} 
         loading={settingsLoading} 
+      />
+
+      <CommandPalette 
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onCommand={handleCommand}
       />
     </div>
   );
