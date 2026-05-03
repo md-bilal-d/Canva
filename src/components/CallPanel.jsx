@@ -5,7 +5,7 @@ import * as Y from 'yjs';
 import { insertDesignFromAI } from '../utils/AIDispatcher.js';
 
 // Video Component for each tile
-const VideoTile = ({ stream, isLocal = false, muted = false, name = "User" }) => {
+const VideoTile = ({ stream, isLocal = false, muted = false, name = "User", remoteUserId, remoteCursors, stageScale, localCursor }) => {
   const videoRef = useRef();
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
@@ -53,6 +53,21 @@ const VideoTile = ({ stream, isLocal = false, muted = false, name = "User" }) =>
             setIsSpeaking(false);
           }
           
+          // --- SPATIAL AUDIO LOGIC ---
+          if (!isLocal && remoteUserId && remoteCursors && localCursor && videoRef.current) {
+            const remoteCursor = remoteCursors[remoteUserId];
+            if (remoteCursor) {
+                const dx = remoteCursor.x - localCursor.x;
+                const dy = remoteCursor.y - localCursor.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Volume falloff: 1.0 at 0 distance, 0.1 at 2000 units
+                let volume = 1 - (distance / 2000);
+                volume = Math.max(0.1, Math.min(1, volume));
+                videoRef.current.volume = volume;
+            }
+          }
+
           animationRef.current = requestAnimationFrame(checkAudio);
         };
 
@@ -68,7 +83,7 @@ const VideoTile = ({ stream, isLocal = false, muted = false, name = "User" }) =>
         audioContextRef.current.close().catch(console.error);
       }
     };
-  }, [stream]);
+  }, [stream, remoteUserId, remoteCursors, localCursor]);
 
   return (
     <div className={`relative flex flex-col items-center justify-center bg-gray-900 rounded-xl overflow-hidden shadow-sm aspect-video ${isSpeaking ? 'ring-2 ring-green-500' : 'ring-1 ring-gray-800'}`}>
@@ -104,7 +119,7 @@ const VideoTile = ({ stream, isLocal = false, muted = false, name = "User" }) =>
   );
 };
 
-export default function CallPanel({ isOpen, onClose, socket, roomId, currentUser, ydoc }) {
+export default function CallPanel({ isOpen, onClose, socket, roomId, currentUser, ydoc, remoteCursors, stageScale, viewportCenter }) {
   const {
     localStream,
     remoteStreams,
@@ -245,8 +260,12 @@ export default function CallPanel({ isOpen, onClose, socket, roomId, currentUser
             key={userId}
             stream={stream}
             isLocal={false}
-            muted={false} // DO NOT MUTE remote audio!
+            muted={false}
             name={`Participant`}
+            remoteUserId={userId}
+            remoteCursors={remoteCursors}
+            stageScale={stageScale}
+            localCursor={viewportCenter}
           />
         ))}
 

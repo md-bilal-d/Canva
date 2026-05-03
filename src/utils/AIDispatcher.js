@@ -146,6 +146,62 @@ export function insertDesignFromAI(ydoc, currentViewPos, scale, intent, params) 
           });
           break;
       }
+      case 'clusterByContent': {
+          // Intelligently group sticky notes by their text content keywords
+          const notes = [];
+          yNotes.forEach((val, key) => notes.push({ id: key, map: val, text: val.get('textContent').toString().toLowerCase() }));
+          if (notes.length === 0) break;
+
+          const topics = {
+            'design': ['ux', 'ui', 'color', 'font', 'layout', 'style', 'brand', 'mockup'],
+            'dev': ['code', 'api', 'bug', 'fix', 'feat', 'git', 'deploy', 'react', 'node'],
+            'biz': ['cost', 'price', 'market', 'user', 'growth', 'sales', 'revenue'],
+            'misc': []
+          };
+
+          const groups = { design: [], dev: [], biz: [], misc: [] };
+          notes.forEach(note => {
+              let assigned = false;
+              for (const [topic, keywords] of Object.entries(topics)) {
+                  if (keywords.some(k => note.text.includes(k))) {
+                      groups[topic].push(note);
+                      assigned = true;
+                      break;
+                  }
+              }
+              if (!assigned) groups.misc.push(note);
+          });
+
+          let groupIndex = 0;
+          const activeGroups = Object.entries(groups).filter(([_, items]) => items.length > 0);
+          
+          activeGroups.forEach(([topic, items]) => {
+              const startX = centerX - (activeGroups.length * 200) + (groupIndex * 450);
+              const startY = centerY - 100;
+              
+              // Draw a "Zone" label
+              const zoneId = 'shape-zone-' + topic + '-' + Date.now();
+              yShapes.set(zoneId, {
+                  id: zoneId,
+                  type: 'rect',
+                  x: startX - 20,
+                  y: startY - 60,
+                  width: 420,
+                  height: 400,
+                  color: 'rgba(99, 102, 241, 0.05)',
+                  strokeWidth: 1,
+                  label: `ZONE: ${topic.toUpperCase()}`,
+                  isLocked: true
+              });
+
+              items.forEach((note, i) => {
+                  note.map.set('x', startX + (i % 2) * 210);
+                  note.map.set('y', startY + Math.floor(i / 2) * 160);
+              });
+              groupIndex++;
+          });
+          break;
+      }
       case 'image': {
           const id = 'shape-' + Date.now();
           yShapes.set(id, {

@@ -183,6 +183,16 @@ export default function AISidebar({ isOpen, onClose, ydoc, viewportCenter, stage
                     <Palette size={14} className="text-gray-400" />
                     Auto Theme
                 </button>
+                <button 
+                  onClick={() => {
+                    insertDesignFromAI(ydoc, viewportCenter, stageScale, 'clusterByContent', {});
+                    onClose();
+                  }}
+                  className="flex items-center gap-2 text-[11px] bg-white text-gray-700 p-2 rounded-xl hover:shadow-md transition border border-gray-100 font-bold"
+                >
+                    <Network size={14} className="text-purple-600" />
+                    Auto Cluster
+                </button>
             </div>
         </div>
       </div>

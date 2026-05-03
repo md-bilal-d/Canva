@@ -56,6 +56,9 @@ import TimerWidget from './components/TimerWidget.jsx';
 import AnalyticsPanel from './components/AnalyticsPanel.jsx';
 import ShareModal from './components/ShareModal.jsx';
 import CommandPalette from './components/CommandPalette.jsx';
+import Portal3D from './components/Portal3D.jsx';
+import AutomationPanel from './components/AutomationPanel.jsx';
+import RecordingService from './utils/RecordingService.js';
 import useTheme from './hooks/useTheme.js';
 import useSharedTimer from './hooks/useSharedTimer.js';
 import useAnalytics from './hooks/useAnalytics.js';
@@ -271,6 +274,10 @@ function Whiteboard() {
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isPortalOpen, setIsPortalOpen] = useState(false);
+  const [isAutomationOpen, setIsAutomationOpen] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const recordingServiceRef = useRef(new RecordingService());
 
 
   const currentUserData = useCurrentUser();
@@ -611,6 +618,72 @@ function Whiteboard() {
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, []);
+
+  // --- Automation Engine Logic ---
+  useEffect(() => {
+    if (!activeDoc || !yShapesRef.current) return;
+    const yAuto = activeDoc.getMap('automations');
+    
+    const checkAutomations = () => {
+      yAuto.forEach(rule => {
+        if (!rule.active) return;
+        
+        // Trigger: enter_region (Simplified logic)
+        if (rule.trigger === 'enter_region') {
+            // Find a "Zone" shape (using label heuristic)
+            let region = null;
+            Object.values(shapes).forEach(s => {
+                if (s.label?.toLowerCase().includes('zone')) region = s;
+            });
+            
+            if (region) {
+                Object.entries(shapes).forEach(([id, s]) => {
+                    if (id === region.id || s.type === 'line') return;
+                    
+                    const isInside = (
+                        s.x > region.x && 
+                        s.x < region.x + (region.width || 400) && 
+                        s.y > region.y && 
+                        s.y < region.y + (region.height || 400)
+                    );
+
+                    if (isInside) {
+                        // Action: change_color
+                        if (rule.action === 'change_color' && s.color !== rule.value) {
+                             activeDoc.transact(() => {
+                                 yShapesRef.current.set(id, { ...s, color: rule.value });
+                             }, 'local');
+                        }
+                        // Action: lock_object
+                        if (rule.action === 'lock_object' && !s.isLocked) {
+                            activeDoc.transact(() => {
+                                yShapesRef.current.set(id, { ...s, isLocked: true });
+                            }, 'local');
+                        }
+                    }
+                });
+            }
+        }
+      });
+    };
+    
+    checkAutomations();
+  }, [shapes, activeDoc]);
+
+  // --- Cinematic Recording Logic ---
+  useEffect(() => {
+    if (!isRecording) return;
+    
+    const interval = setInterval(() => {
+        recordingServiceRef.current.capture(
+            { x: stagePos.x, y: stagePos.y, scale: stageScale },
+            shapes,
+            stickyNotes
+        );
+    }, 500); // Capture every 500ms
+    
+    return () => clearInterval(interval);
+  }, [isRecording, stagePos, stageScale, shapes, stickyNotes]);
 
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
@@ -2150,6 +2223,13 @@ function Whiteboard() {
           >
             <BarChart3 size={18} className={isAnalyticsOpen ? "text-indigo-500" : ""} />
           </button>
+          <button 
+            className={`tool-btn ${isAutomationOpen ? 'active' : ''}`} 
+            onClick={() => setIsAutomationOpen(!isAutomationOpen)} 
+            title="Workflow Automations"
+          >
+            <Zap size={18} className={isAutomationOpen ? "text-amber-500" : ""} />
+          </button>
         </div>
         <div className="toolbar-divider" />
         <div className="toolbar-section">
@@ -2177,6 +2257,13 @@ function Whiteboard() {
             title="Export to React Code"
           >
             <Code size={18} className={isCodeExportOpen ? "text-blue-400" : ""} />
+          </button>
+          <button 
+            className={`tool-btn ${isPortalOpen ? 'active' : ''}`} 
+            onClick={() => setIsPortalOpen(true)} 
+            title="Open 3D Portal"
+          >
+            <Box size={18} className={isPortalOpen ? "text-purple-400" : ""} />
           </button>
         </div>
 
@@ -2275,6 +2362,8 @@ function Whiteboard() {
           x: (-stagePos.x + window.innerWidth / 2) / stageScale,
           y: (-stagePos.y + window.innerHeight / 2) / stageScale 
         }}
+        remoteCursors={remoteCursors}
+        stageScale={stageScale}
       />
 
       {incomingCall && !isCallOpen && (
@@ -2307,6 +2396,24 @@ function Whiteboard() {
       )}
 
       <div className="zoom-indicator animate-fade-in shadow-xl">
+        <button 
+          className={`zoom-btn ${isRecording ? 'text-red-500 bg-red-50' : ''}`}
+          onClick={() => {
+            if (isRecording) {
+                const rec = recordingServiceRef.current.stop();
+                setIsRecording(false);
+                recordingServiceRef.current.download(rec);
+            } else {
+                recordingServiceRef.current.start();
+                setIsRecording(true);
+            }
+          }}
+          title={isRecording ? "Stop Recording" : "Record Session"}
+        >
+            <div className={`w-3 h-3 rounded-full mr-1 ${isRecording ? 'bg-red-600 animate-pulse' : 'bg-gray-400'}`} />
+            <span className="text-[10px] font-bold mr-2">{isRecording ? "STOP" : "REC"}</span>
+        </button>
+        <div className="w-[1px] h-4 bg-gray-200 mr-2" />
         <button className="zoom-btn" onClick={() => setStageScale(s => Math.max(0.1, s / 1.15))}><Minus size={14} /></button>
         <span className="zoom-value">{zoomPercent}%</span>
         <button className="zoom-btn" onClick={() => setStageScale(s => Math.min(5, s * 1.15))}><Plus size={14} /></button>
@@ -2730,6 +2837,21 @@ function Whiteboard() {
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
         onCommand={handleCommand}
+      />
+
+      {isPortalOpen && (
+        <Portal3D 
+          shapes={shapes}
+          stickyNotes={stickyNotes}
+          onClose={() => setIsPortalOpen(false)}
+        />
+      )}
+
+      <AutomationPanel 
+        isOpen={isAutomationOpen}
+        onClose={() => setIsAutomationOpen(false)}
+        ydoc={activeDoc}
+        shapes={shapes}
       />
     </div>
   );
