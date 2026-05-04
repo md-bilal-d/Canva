@@ -63,7 +63,9 @@ import useTheme from './hooks/useTheme.js';
 import useSharedTimer from './hooks/useSharedTimer.js';
 import useAnalytics from './hooks/useAnalytics.js';
 import useBoardSettings from './hooks/useBoardSettings.js';
-import { Clock, Users } from 'lucide-react';
+import AIImageStudio from './components/AIImageStudio.jsx';
+import TicTacToeWidget from './components/TicTacToeWidget.jsx';
+import { Clock, Users, Gamepad2, ImageIcon } from 'lucide-react';
 import './index.css';
 
 // --- Server URL ---
@@ -276,6 +278,8 @@ function Whiteboard() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isPortalOpen, setIsPortalOpen] = useState(false);
   const [isAutomationOpen, setIsAutomationOpen] = useState(false);
+  const [isAIImageOpen, setIsAIImageOpen] = useState(false);
+  const [isTicTacToeOpen, setIsTicTacToeOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const recordingServiceRef = useRef(new RecordingService());
 
@@ -2230,6 +2234,20 @@ function Whiteboard() {
           >
             <Zap size={18} className={isAutomationOpen ? "text-amber-500" : ""} />
           </button>
+          <button 
+            className={`tool-btn ${isAIImageOpen ? 'active' : ''}`} 
+            onClick={() => setIsAIImageOpen(!isAIImageOpen)} 
+            title="AI Image Studio"
+          >
+            <ImageIcon size={18} className={isAIImageOpen ? "text-purple-500" : ""} />
+          </button>
+          <button 
+            className={`tool-btn ${isTicTacToeOpen ? 'active' : ''}`} 
+            onClick={() => setIsTicTacToeOpen(!isTicTacToeOpen)} 
+            title="Play Tic Tac Toe"
+          >
+            <Gamepad2 size={18} className={isTicTacToeOpen ? "text-pink-500" : ""} />
+          </button>
         </div>
         <div className="toolbar-divider" />
         <div className="toolbar-section">
@@ -2794,6 +2812,30 @@ function Whiteboard() {
         onClose={() => setIsCodeExportOpen(false)}
         selectedShapes={selectedId ? [shapes[selectedId]].filter(Boolean) : []}
       />
+
+      <AIImageStudio 
+        isOpen={isAIImageOpen} 
+        onClose={() => setIsAIImageOpen(false)} 
+        ydoc={activeDoc} 
+        viewportCenter={{ 
+          x: (-stagePos.x + window.innerWidth / 2) / stageScale,
+          y: (-stagePos.y + window.innerHeight / 2) / stageScale 
+        }} 
+      />
+
+      <TicTacToeWidget 
+        isOpen={isTicTacToeOpen} 
+        onClose={() => setIsTicTacToeOpen(false)} 
+        ydoc={activeDoc} 
+        currentUser={currentUser} 
+      />
+
+      {isRecording && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 bg-red-600 text-white rounded-full flex items-center gap-2 shadow-xl z-[10000] animate-pulse">
+          <div className="w-2 h-2 rounded-full bg-white animate-ping" />
+          <span className="text-xs font-bold uppercase tracking-widest">Recording Session...</span>
+        </div>
+      )}
 
       <VoiceControl 
         ydoc={activeDoc}

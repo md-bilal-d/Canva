@@ -139,6 +139,25 @@
 .p-2 { padding: 8px; }
 .px-4 { padding-left: 16px; padding-right: 16px; }
 .py-2 { padding-top: 8px; padding-bottom: 8px; }
+.py-4 { padding-top: 16px; padding-bottom: 16px; }
+.p-5 { padding: 20px; }
+
+/* New Utilities */
+.shadow-3xl { box-shadow: 0 35px 60px -15px rgba(0, 0, 0, 0.3); }
+.shadow-4xl { box-shadow: 0 45px 80px -20px rgba(0, 0, 0, 0.35); }
+.backdrop-blur-xl { backdrop-filter: blur(24px); }
+.backdrop-blur-3xl { backdrop-filter: blur(64px); }
+
+.animate-in { animation: fadeIn 0.3s ease-out; }
+.slide-in-from-left-8 { animation: slideInLeft 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+
+@keyframes slideInLeft {
+  from { transform: translateX(-20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.aspect-square { aspect-ratio: 1 / 1; }
+.aspect-\[4\/3\] { aspect-ratio: 4 / 3; }
 
 /* --- 3D Depth Wrapper --- */
 .canvas-depth-wrapper {
