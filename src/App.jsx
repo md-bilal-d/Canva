@@ -65,7 +65,7 @@ import useAnalytics from './hooks/useAnalytics.js';
 import useBoardSettings from './hooks/useBoardSettings.js';
 import AIImageStudio from './components/AIImageStudio.jsx';
 import TicTacToeWidget from './components/TicTacToeWidget.jsx';
-import { Clock, Users, Gamepad2, ImageIcon } from 'lucide-react';
+import { Clock, Users, ImageIcon } from 'lucide-react';
 import './index.css';
 
 // --- Server URL ---

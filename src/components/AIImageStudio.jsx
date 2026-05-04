@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Sparkles, X, Image as ImageIcon, Download, Plus, Loader2, Wand2, Search } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { insertDesignFromAI } from '../utils/AIDispatcher';
 
 export default function AIImageStudio({ isOpen, onClose, ydoc, viewportCenter }) {

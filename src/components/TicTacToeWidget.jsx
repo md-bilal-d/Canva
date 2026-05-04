@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Gamepad2, X as CloseIcon, RotateCcw, Trophy, User, UserPlus } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import * as Y from 'yjs';
 
 export default function TicTacToeWidget({ isOpen, onClose, ydoc, currentUser }) {
@@ -8,7 +8,7 @@ export default function TicTacToeWidget({ isOpen, onClose, ydoc, currentUser }) 
   const [turn, setTurn] = useState('X');
   const [winner, setWinner] = useState(null);
   const [players, setPlayers] = useState({ X: null, O: null });
-  const [position, setPosition] = useState({ x: window.innerWidth - 320, y: window.innerHeight - 450 });
+  const [position] = useState({ x: window.innerWidth - 320, y: window.innerHeight - 450 });
 
   const gameMap = ydoc.getMap('tictactoe');
 
