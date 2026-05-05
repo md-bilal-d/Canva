@@ -2,11 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Group, Rect, Text } from 'react-konva';
 import { Html } from 'react-konva-utils';
 import { X, Code, Copy, Check } from 'lucide-react';
+import * as Y from 'yjs';
 
 export default function CodeWidget({ id, shapeMap, onDelete }) {
-  const [code, setCode] = useState(shapeMap.get('code') || '');
-  const [language, setLanguage] = useState(shapeMap.get('language') || 'javascript');
+  const [code, setCode] = useState('');
+  const [language, setLanguage] = useState('javascript');
   const [copied, setCopied] = useState(false);
+  const textareaRef = useRef(null);
   
   const x = shapeMap.get('x') || 0;
   const y = shapeMap.get('y') || 0;
@@ -14,19 +16,43 @@ export default function CodeWidget({ id, shapeMap, onDelete }) {
   const height = shapeMap.get('height') || 300;
 
   useEffect(() => {
-    const observe = () => {
-      setCode(shapeMap.get('code') || '');
-      setLanguage(shapeMap.get('language') || 'javascript');
-    };
-    shapeMap.observe(observe);
-    return () => shapeMap.unobserve(observe);
+    if (!shapeMap) return;
+
+    const yText = shapeMap.get('code');
+    if (yText instanceof Y.Text) {
+      setCode(yText.toString());
+      
+      const observeText = () => {
+        setCode(yText.toString());
+      };
+      yText.observe(observeText);
+
+      const observeMap = () => {
+        setLanguage(shapeMap.get('language') || 'javascript');
+      };
+      shapeMap.observe(observeMap);
+      observeMap();
+
+      return () => {
+        yText.unobserve(observeText);
+        shapeMap.unobserve(observeMap);
+      };
+    }
   }, [shapeMap]);
 
   const handleInput = (e) => {
     const val = e.target.value;
-    shapeMap.doc.transact(() => {
-      shapeMap.set('code', val);
-    }, 'local');
+    const yText = shapeMap.get('code');
+    if (yText instanceof Y.Text) {
+      const oldText = yText.toString();
+      // Simple diff-based update for Y.Text
+      shapeMap.doc.transact(() => {
+        if (val !== oldText) {
+          yText.delete(0, oldText.length);
+          yText.insert(0, val);
+        }
+      }, 'local');
+    }
   };
 
   const handleCopy = () => {
@@ -50,14 +76,6 @@ export default function CodeWidget({ id, shapeMap, onDelete }) {
         shadowBlur={20}
         shadowOpacity={0.3}
         shadowOffset={{ x: 0, y: 10 }}
-      />
-      
-      {/* Header */}
-      <Rect
-        width={width}
-        height={40}
-        fill="#2d2d2d"
-        cornerRadius={[12, 12, 0, 0]}
       />
       
       <Html divProps={{ style: { width, height, pointerEvents: 'none' } }}>
@@ -97,6 +115,7 @@ export default function CodeWidget({ id, shapeMap, onDelete }) {
           
           <div className="flex-1 relative bg-[#1e1e1e] pointer-events-auto">
             <textarea
+              ref={textareaRef}
               className="w-full h-full bg-transparent text-[#d4d4d4] p-4 font-mono text-xs resize-none outline-none border-none scrollbar-hide"
               value={code}
               onInput={handleInput}

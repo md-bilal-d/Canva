@@ -465,7 +465,12 @@ function Whiteboard() {
     const observeShapes = () => {
       const shapesMap = {};
       yShapes.forEach((val, key) => {
-        shapesMap[key] = val;
+        if (val instanceof Y.Map) {
+          const json = val.toJSON();
+          shapesMap[key] = { ...json, _raw: val };
+        } else {
+          shapesMap[key] = val;
+        }
       });
       setShapes(shapesMap);
     };
@@ -1330,16 +1335,21 @@ function Whiteboard() {
           y: (window.innerHeight / 2 - stagePos.y) / stageScale - 150
         };
         yShapesRef.current.doc.transact(() => {
-          yShapesRef.current.set(id, {
-            id,
-            type: 'code_widget',
-            x: pos.x,
-            y: pos.y,
-            width: 400,
-            height: 300,
-            code: '// Happy coding!',
-            language: 'javascript'
-          });
+          const map = new Y.Map();
+          map.set('id', id);
+          map.set('type', 'code_widget');
+          map.set('x', pos.x);
+          map.set('y', pos.y);
+          map.set('width', 400);
+          map.set('height', 300);
+          map.set('language', 'javascript');
+          
+          // Use Y.Text for collaborative code editing!
+          const yText = new Y.Text();
+          yText.insert(0, '// Happy coding!');
+          map.set('code', yText);
+          
+          yShapesRef.current.set(id, map);
         }, 'local');
         setSelectedId(id);
         break;
@@ -1845,7 +1855,7 @@ function Whiteboard() {
             <CodeWidget 
               key={id}
               id={id}
-              shapeMap={yShapesRef.current.get(id)}
+              shapeMap={shape._raw || yShapesRef.current.get(id)}
               onDelete={(shapeId) => {
                   activeDoc.transact(() => {
                       yShapesRef.current.delete(shapeId);
