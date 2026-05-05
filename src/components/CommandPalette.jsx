@@ -21,6 +21,7 @@ const COMMANDS = [
   { id: 'tool-chart', label: 'Chart Widget', icon: BarChart3, category: 'Tools', action: 'setTool', value: 'chart' },
   { id: 'tool-iframe', label: 'Embed (iframe)', icon: Globe, category: 'Tools', action: 'setTool', value: 'iframe' },
   { id: 'tool-portal', label: 'Portal', icon: Network, category: 'Tools', action: 'setTool', value: 'portal' },
+  { id: 'tool-code-widget', label: 'Code Widget', icon: Code, category: 'Tools', action: 'addCodeWidget' },
 
   // Actions
   { id: 'action-undo', label: 'Undo', icon: Undo2, category: 'Actions', action: 'undo', shortcut: 'Ctrl+Z' },
@@ -28,6 +29,10 @@ const COMMANDS = [
   { id: 'action-clear', label: 'Clear Canvas', icon: Trash2, category: 'Actions', action: 'clear' },
   { id: 'action-export', label: 'Export as PNG', icon: Download, category: 'Actions', action: 'export' },
   { id: 'action-copy-link', label: 'Copy Room Link', icon: Link, category: 'Actions', action: 'copyLink' },
+  { id: 'action-layout-grid', label: 'Arrange as Grid', icon: LayoutGrid, category: 'Actions', action: 'layout', value: 'grid' },
+  { id: 'action-layout-circle', label: 'Arrange as Circle', icon: CircleIcon, category: 'Actions', action: 'layout', value: 'circle' },
+  { id: 'action-layout-mindmap', label: 'Radial Mind Map', icon: Workflow, category: 'Actions', action: 'layout', value: 'mind-map' },
+  { id: 'action-layout-spiral', label: 'Spiral Layout', icon: RotateCcw, category: 'Actions', action: 'layout', value: 'spiral' },
 
   // Panels
   { id: 'panel-ai', label: 'AI Design Assistant', icon: Sparkles, category: 'Panels', action: 'togglePanel', value: 'ai' },

@@ -96,24 +96,39 @@ export default function ConnectorLayer({
     }
   }, [editingConnectorId, editingLabel, onUpdateConnector]);
 
+  const [dashOffset, setDashOffset] = useState(0);
+
+  useEffect(() => {
+    let anim;
+    const tick = () => {
+      setDashOffset((prev) => (prev - 1) % 100);
+      anim = requestAnimationFrame(tick);
+    };
+    anim = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(anim);
+  }, []);
+
   return (
     <>
       <Layer name="connector-layer" listening={connectionMode}>
         {/* Rendered connectors */}
         {renderedConnectors.map((conn) => {
           const pts = conn.computedPoints;
+          const isFlowing = conn.flowAnimation;
           return (
             <Group key={conn.id}>
               <Arrow
                 points={pts.points}
                 stroke={conn.color || '#6366f1'}
-                strokeWidth={2.5}
+                strokeWidth={isFlowing ? 3 : 2.5}
                 fill={conn.color || '#6366f1'}
                 pointerLength={10}
                 pointerWidth={8}
                 tension={pts.bezier ? 0.5 : 0}
                 bezier={pts.bezier}
                 hitStrokeWidth={12}
+                dash={isFlowing ? [10, 5] : null}
+                dashOffset={isFlowing ? dashOffset * (conn.flowSpeed || 1) : 0}
                 onDblClick={() => handleConnectorDblClick(conn.id, conn)}
               />
               {/* Connector label */}
@@ -222,7 +237,19 @@ export default function ConnectorLayer({
                   }}
                   placeholder="Enter label..."
                 />
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0' }}>
+                  <input 
+                    type="checkbox" 
+                    id="flow-toggle"
+                    checked={renderedConnectors.find(c => c.id === editingConnectorId)?.flowAnimation || false}
+                    onChange={(e) => onUpdateConnector?.(editingConnectorId, { flowAnimation: e.target.checked })}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <label htmlFor="flow-toggle" style={{ fontSize: '12px', color: '#4b5563', cursor: 'pointer', fontWeight: 500 }}>
+                    Enable Magic Flow Animation
+                  </label>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
                   <button
                     onClick={() => setEditingConnectorId(null)}
                     style={{

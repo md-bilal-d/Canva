@@ -7,13 +7,14 @@ export const LAYOUT_TYPES = {
   GRID: 'grid',
   STACK_H: 'stack-h',
   STACK_V: 'stack-v',
-  CIRCLE: 'circle',
+  MIND_MAP: 'mind-map',
+  SPIRAL: 'spiral',
 };
 
 /**
  * Arranges a set of shapes according to the specified layout type.
  * @param {Array} shapes - Array of shape objects to arrange.
- * @param {string} type - The layout type (GRID, STACK_H, STACK_V, CIRCLE).
+ * @param {string} type - The layout type (GRID, STACK_H, STACK_V, CIRCLE, SPIRAL).
  * @param {number} startX - Starting X position.
  * @param {number} startY - Starting Y position.
  * @param {number} padding - Padding between shapes.
@@ -72,7 +73,7 @@ export function calculateLayoutUpdates(shapes, type, startX, startY, padding = 4
     }
 
     case LAYOUT_TYPES.CIRCLE: {
-      const radius = Math.max(200, sortedShapes.length * 40);
+      const radius = Math.max(200, sortedShapes.length * 60);
       const centerX = startX + radius;
       const centerY = startY + radius;
       sortedShapes.forEach((shape, i) => {
@@ -84,6 +85,38 @@ export function calculateLayoutUpdates(shapes, type, startX, startY, padding = 4
         });
       });
       break;
+    }
+
+    case LAYOUT_TYPES.SPIRAL: {
+        sortedShapes.forEach((shape, i) => {
+            const angle = 0.5 * i;
+            const radius = 20 * i;
+            updates.push({
+                id: shape.id,
+                x: startX + Math.cos(angle) * radius,
+                y: startY + Math.sin(angle) * radius,
+            });
+        });
+        break;
+    }
+
+    case LAYOUT_TYPES.MIND_MAP: {
+        // Simple radial mind map logic: First shape is root, others are children
+        const root = sortedShapes[0];
+        const children = sortedShapes.slice(1);
+        const radius = 250;
+        
+        updates.push({ id: root.id, x: startX, y: startY });
+        
+        children.forEach((shape, i) => {
+            const angle = (i / children.length) * Math.PI * 2;
+            updates.push({
+                id: shape.id,
+                x: startX + Math.cos(angle) * radius,
+                y: startY + Math.sin(angle) * radius,
+            });
+        });
+        break;
     }
 
     default:

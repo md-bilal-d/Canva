@@ -294,6 +294,8 @@ export default function useConnectors(ydoc) {
         toPoint: connector.toPoint || null,
         color: connector.color || '#6366f1',
         label: connector.label || '',
+        flowAnimation: connector.flowAnimation || false,
+        flowSpeed: connector.flowSpeed || 2,
       });
     }, 'local');
 

@@ -65,7 +65,8 @@ import useAnalytics from './hooks/useAnalytics.js';
 import useBoardSettings from './hooks/useBoardSettings.js';
 import AIImageStudio from './components/AIImageStudio.jsx';
 import TicTacToeWidget from './components/TicTacToeWidget.jsx';
-import { Clock, Users, ImageIcon } from 'lucide-react';
+import CodeWidget from './components/CodeWidget.jsx';
+import { Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2 } from 'lucide-react';
 import './index.css';
 
 // --- Server URL ---
@@ -1322,6 +1323,41 @@ function Whiteboard() {
           case 'grid': setIsGridEnabled(!isGridEnabled); break;
         }
         break;
+      case 'addCodeWidget': {
+        const id = 'code-' + Date.now();
+        const pos = {
+          x: (window.innerWidth / 2 - stagePos.x) / stageScale - 200,
+          y: (window.innerHeight / 2 - stagePos.y) / stageScale - 150
+        };
+        yShapesRef.current.doc.transact(() => {
+          yShapesRef.current.set(id, {
+            id,
+            type: 'code_widget',
+            x: pos.x,
+            y: pos.y,
+            width: 400,
+            height: 300,
+            code: '// Happy coding!',
+            language: 'javascript'
+          });
+        }, 'local');
+        setSelectedId(id);
+        break;
+      }
+      case 'layout': {
+        const allShapes = Object.values(shapes).filter(s => s.type !== 'line');
+        const updates = calculateLayoutUpdates(allShapes, cmd.value, 400, 400);
+        activeDoc.transact(() => {
+          updates.forEach(u => {
+            const prev = yShapesRef.current.get(u.id);
+            if (prev) {
+                yShapesRef.current.set(u.id, { ...prev, x: u.x, y: u.y });
+                recalculateForShape(u.id, shapes);
+            }
+          });
+        }, 'local');
+        break;
+      }
     }
   }, [
     handleClear, handleExport, handleCopyLink,
@@ -1799,14 +1835,23 @@ function Whiteboard() {
         case 'kanban':
           return (
             <Group key={id} {...commonProps}>
-              <Html>
-                <KanbanBoard 
-                  ydoc={activeDoc} 
-                  currentUser={currentUser} 
-                  roomMembers={stackUsers}
-                />
+              <Html divProps={{ style: { width: shape.width, height: shape.height } }}>
+                <KanbanBoard shapeId={id} ydoc={activeDoc} />
               </Html>
             </Group>
+          );
+        case 'code_widget':
+          return (
+            <CodeWidget 
+              key={id}
+              id={id}
+              shapeMap={yShapesRef.current.get(id)}
+              onDelete={(shapeId) => {
+                  activeDoc.transact(() => {
+                      yShapesRef.current.delete(shapeId);
+                  }, 'local');
+              }}
+            />
           );
         case 'frame':
           return (
@@ -2333,6 +2378,83 @@ function Whiteboard() {
                     )}
                 </div>
             </>
+        )}
+
+        {/* --- Multi-Select Smart Layout Toolbar --- */}
+        {selectedId === null && Object.keys(shapes).length > 1 && (
+            <div className="absolute bottom-24 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-xl border border-gray-200 rounded-2xl shadow-2xl p-2 flex items-center gap-2 animate-in slide-in-from-bottom-4">
+                <div className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-bold uppercase tracking-widest mr-1">
+                    Smart Layout
+                </div>
+                <button 
+                    className="p-2 hover:bg-gray-100 rounded-xl text-gray-600 transition flex flex-col items-center gap-1"
+                    onClick={() => {
+                        const allShapes = Object.values(shapes).filter(s => s.type !== 'line');
+                        const updates = calculateLayoutUpdates(allShapes, LAYOUT_TYPES.GRID, 100, 100);
+                        activeDoc.transact(() => {
+                            updates.forEach(u => {
+                                const prev = yShapesRef.current.get(u.id);
+                                if (prev) yShapesRef.current.set(u.id, { ...prev, x: u.x, y: u.y });
+                            });
+                        }, 'local');
+                    }}
+                    title="Arrange as Grid"
+                >
+                    <Grid3X3 size={16} />
+                    <span className="text-[8px] font-bold">GRID</span>
+                </button>
+                <button 
+                    className="p-2 hover:bg-gray-100 rounded-xl text-gray-600 transition flex flex-col items-center gap-1"
+                    onClick={() => {
+                        const allShapes = Object.values(shapes).filter(s => s.type !== 'line');
+                        const updates = calculateLayoutUpdates(allShapes, LAYOUT_TYPES.CIRCLE, 100, 100);
+                        activeDoc.transact(() => {
+                            updates.forEach(u => {
+                                const prev = yShapesRef.current.get(u.id);
+                                if (prev) yShapesRef.current.set(u.id, { ...prev, x: u.x, y: u.y });
+                            });
+                        }, 'local');
+                    }}
+                    title="Arrange as Circle"
+                >
+                    <CircleIcon size={16} />
+                    <span className="text-[8px] font-bold">CIRCLE</span>
+                </button>
+                <button 
+                    className="p-2 hover:bg-gray-100 rounded-xl text-gray-600 transition flex flex-col items-center gap-1"
+                    onClick={() => {
+                        const allShapes = Object.values(shapes).filter(s => s.type !== 'line');
+                        const updates = calculateLayoutUpdates(allShapes, LAYOUT_TYPES.MIND_MAP, 400, 400);
+                        activeDoc.transact(() => {
+                            updates.forEach(u => {
+                                const prev = yShapesRef.current.get(u.id);
+                                if (prev) yShapesRef.current.set(u.id, { ...prev, x: u.x, y: u.y });
+                            });
+                        }, 'local');
+                    }}
+                    title="Radial Mind Map"
+                >
+                    <Workflow size={16} />
+                    <span className="text-[8px] font-bold">MIND MAP</span>
+                </button>
+                <button 
+                    className="p-2 hover:bg-gray-100 rounded-xl text-gray-600 transition flex flex-col items-center gap-1"
+                    onClick={() => {
+                        const allShapes = Object.values(shapes).filter(s => s.type !== 'line');
+                        const updates = calculateLayoutUpdates(allShapes, LAYOUT_TYPES.SPIRAL, 400, 400);
+                        activeDoc.transact(() => {
+                            updates.forEach(u => {
+                                const prev = yShapesRef.current.get(u.id);
+                                if (prev) yShapesRef.current.set(u.id, { ...prev, x: u.x, y: u.y });
+                            });
+                        }, 'local');
+                    }}
+                    title="Spiral Layout"
+                >
+                    <RotateCcw size={16} />
+                    <span className="text-[8px] font-bold">SPIRAL</span>
+                </button>
+            </div>
         )}
       </div>
 
