@@ -66,7 +66,9 @@ import useBoardSettings from './hooks/useBoardSettings.js';
 import AIImageStudio from './components/AIImageStudio.jsx';
 import TicTacToeWidget from './components/TicTacToeWidget.jsx';
 import CodeWidget from './components/CodeWidget.jsx';
-import { Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2 } from 'lucide-react';
+import VideoWidget from './components/VideoWidget.jsx';
+import ReactionWheel from './components/ReactionWheel.jsx';
+import { Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon } from 'lucide-react';
 import './index.css';
 
 // --- Server URL ---
@@ -281,6 +283,7 @@ function Whiteboard() {
   const [isAutomationOpen, setIsAutomationOpen] = useState(false);
   const [isAIImageOpen, setIsAIImageOpen] = useState(false);
   const [isTicTacToeOpen, setIsTicTacToeOpen] = useState(false);
+  const [reactionWheelPos, setReactionWheelPos] = useState(null); // { x, y } screen coordinates
   const [isRecording, setIsRecording] = useState(false);
   const recordingServiceRef = useRef(new RecordingService());
 
@@ -611,6 +614,16 @@ function Whiteboard() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         setIsCommandPaletteOpen(prev => !prev);
+      }
+
+      // Reaction Wheel Toggle
+      if (e.key === 'e' || e.key === 'E') {
+          if (!reactionWheelPos) {
+              const pointer = stageRef.current?.getPointerPosition() || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+              setReactionWheelPos(pointer);
+          } else {
+              setReactionWheelPos(null);
+          }
       }
     };
 
@@ -1005,6 +1018,8 @@ function Whiteboard() {
       setCurrentShape({ type: 'chart', x: pos.x, y: pos.y, width: 0, height: 0 });
     } else if (tool === 'iframe') {
       setCurrentShape({ type: 'iframe', x: pos.x, y: pos.y, width: 0, height: 0 });
+    } else if (tool === 'video') {
+      setCurrentShape({ type: 'video_widget', x: pos.x, y: pos.y, width: 0, height: 0 });
     } else if (tool === 'portal') {
       // Create a portal that links to a far-away part of the canvas by default
       const id = 'portal-' + Date.now();
@@ -1133,7 +1148,7 @@ function Whiteboard() {
         ...prev,
         points: [start.x, start.y, pos.x, pos.y],
       }));
-    } else if (tool === 'chart' || tool === 'iframe' || tool === 'frame') {
+    } else if (tool === 'chart' || tool === 'iframe' || tool === 'frame' || tool === 'video') {
       const start = drawStartRef.current;
       setCurrentShape(prev => ({
         ...prev,
@@ -1195,9 +1210,13 @@ function Whiteboard() {
         const distToStart = Math.sqrt(Math.pow(pts[0] - pts[pts.length - 2], 2) + Math.pow(pts[1] - pts[pts.length - 1], 2));
 
         // If closed loop and reasonable size
-        if (distToStart < 50 && w > 30 && h > 30) {
+        if (distToStart < 60 && w > 30 && h > 30) {
           const aspectRatio = Math.max(w, h) / Math.min(w, h);
-          if (aspectRatio < 1.3) {
+          
+          // Visual feedback for conversion
+          spawnReactionBurst('✨', minX + w/2, minY + h/2);
+
+          if (aspectRatio < 1.25) {
             // Circle
             shapeToSave = {
               type: 'circle',
@@ -1205,6 +1224,20 @@ function Whiteboard() {
               y: minY + h / 2,
               radiusX: w / 2,
               radiusY: h / 2,
+              color: currentShape.color,
+              strokeWidth: currentShape.strokeWidth
+            };
+          } else if (aspectRatio > 2.0) {
+            // Triangle (Heuristic: high aspect ratio closed loops often intended as triangles or flat rects)
+            // But let's actually just do a better check or stick to Rect/Circle for now
+            // Unless I add a Triangle type. 
+            // Wait, Konva doesn't have a 'Triangle' but I can use 'RegularPolygon' or 'Line' with closed=true.
+            shapeToSave = {
+              type: 'rect',
+              x: minX,
+              y: minY,
+              width: w,
+              height: h,
               color: currentShape.color,
               strokeWidth: currentShape.strokeWidth
             };
@@ -1316,6 +1349,13 @@ function Whiteboard() {
           case 'call': setIsCallOpen(!isCallOpen); break;
           case 'code': setIsCodeExportOpen(!isCodeExportOpen); break;
           case 'brandkit': setIsBrandKitOpen(!isBrandKitOpen); break;
+        }
+        break;
+      case 'toggleReactionWheel':
+        if (!reactionWheelPos) {
+            setReactionWheelPos({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+        } else {
+            setReactionWheelPos(null);
         }
         break;
       case 'toggle':
@@ -1850,6 +1890,14 @@ function Whiteboard() {
               </Html>
             </Group>
           );
+        case 'video_widget':
+          return (
+            <Group key={id} {...commonProps}>
+              <Html divProps={{ style: { width: shape.width, height: shape.height } }}>
+                <VideoWidget shapeId={id} ydoc={activeDoc} initialUrl={shape.url} />
+              </Html>
+            </Group>
+          );
         case 'code_widget':
           return (
             <CodeWidget 
@@ -1880,7 +1928,6 @@ function Whiteboard() {
               shape={shape}
               isSelected={id === selectedId}
               onNavigate={handleTransitionTo}
-              draggable={tool === 'select'}
               draggable={tool === 'select' && !shape.locked}
             />
           );
@@ -2075,6 +2122,9 @@ function Whiteboard() {
           </button>
           <button className={`tool-btn ${tool === 'iframe' ? 'active' : ''}`} onClick={() => { setTool('iframe'); setActiveEmoji(null); }} title="Web Portal">
             <Globe size={18} />
+          </button>
+          <button className={`tool-btn ${tool === 'video' ? 'active' : ''}`} onClick={() => { setTool('video'); setActiveEmoji(null); }} title="Video Player">
+            <VideoIcon size={18} />
           </button>
           <button className={`tool-btn ${tool === 'portal' ? 'active' : ''}`} onClick={() => { setTool('portal'); setActiveEmoji(null); }} title="Navigation Portal">
             <Compass size={18} />
@@ -2920,6 +2970,20 @@ function Whiteboard() {
         )}
       </div>
       
+      {reactionWheelPos && (
+          <ReactionWheel 
+            x={reactionWheelPos.x}
+            y={reactionWheelPos.y}
+            onSelect={(emoji) => {
+                const relX = (reactionWheelPos.x - stagePos.x) / stageScale;
+                const relY = (reactionWheelPos.y - stagePos.y) / stageScale;
+                addReactionWithBurst(emoji, relX, relY);
+                setReactionWheelPos(null);
+            }}
+            onClose={() => setReactionWheelPos(null)}
+          />
+      )}
+
       <MobileToolbar 
         tool={tool}
         color={color}
