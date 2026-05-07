@@ -240,4 +240,3 @@ export default function PollWidget({
 }
 
 export { PollCreationModal };
-al };

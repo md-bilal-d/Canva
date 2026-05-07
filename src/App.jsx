@@ -68,7 +68,9 @@ import TicTacToeWidget from './components/TicTacToeWidget.jsx';
 import CodeWidget from './components/CodeWidget.jsx';
 import VideoWidget from './components/VideoWidget.jsx';
 import ReactionWheel from './components/ReactionWheel.jsx';
-import { Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon } from 'lucide-react';
+import ThemeGenerator from './components/ThemeGenerator.jsx';
+import useShapeRecognition from './hooks/useShapeRecognition.js';
+import { Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon, Wand2, MousePointerSquare } from 'lucide-react';
 import './index.css';
 
 // --- Server URL ---
@@ -285,7 +287,11 @@ function Whiteboard() {
   const [isTicTacToeOpen, setIsTicTacToeOpen] = useState(false);
   const [reactionWheelPos, setReactionWheelPos] = useState(null); // { x, y } screen coordinates
   const [isRecording, setIsRecording] = useState(false);
+  const [isThemeGeneratorOpen, setIsThemeGeneratorOpen] = useState(false);
+  const [autoShapeEnabled, setAutoShapeEnabled] = useState(true);
   const recordingServiceRef = useRef(new RecordingService());
+
+  const { recognize } = useShapeRecognition();
 
 
   const currentUserData = useCurrentUser();
@@ -1198,60 +1204,72 @@ function Whiteboard() {
       // AUTO-SHAPE CONVERSION 
       if (currentShape.type === 'line' && currentShape.points.length > 10) {
         const pts = currentShape.points;
-        let minX = pts[0], maxX = pts[0], minY = pts[1], maxY = pts[1];
-        for (let i = 0; i < pts.length; i += 2) {
-          minX = Math.min(minX, pts[i]);
-          maxX = Math.max(maxX, pts[i]);
-          minY = Math.min(minY, pts[i + 1]);
-          maxY = Math.max(maxY, pts[i + 1]);
+        
+        if (autoShapeEnabled) {
+          const recognized = recognize(pts);
+          if (recognized) {
+            spawnReactionBurst('✨', recognized.x, recognized.y);
+            if (recognized.type === 'circle') {
+              shapeToSave = {
+                type: 'circle',
+                x: recognized.x,
+                y: recognized.y,
+                radiusX: recognized.radius,
+                radiusY: recognized.radius,
+                color: currentShape.color,
+                strokeWidth: currentShape.strokeWidth
+              };
+            } else if (recognized.type === 'rect') {
+              shapeToSave = {
+                type: 'rect',
+                x: recognized.x,
+                y: recognized.y,
+                width: recognized.width,
+                height: recognized.height,
+                color: currentShape.color,
+                strokeWidth: currentShape.strokeWidth
+              };
+            }
+          }
         }
-        const w = maxX - minX;
-        const h = maxY - minY;
-        const distToStart = Math.sqrt(Math.pow(pts[0] - pts[pts.length - 2], 2) + Math.pow(pts[1] - pts[pts.length - 1], 2));
+        
+        if (!shapeToSave) {
+          // Fallback to original primitive logic if recognize fails or is disabled
+          let minX = pts[0], maxX = pts[0], minY = pts[1], maxY = pts[1];
+          for (let i = 0; i < pts.length; i += 2) {
+            minX = Math.min(minX, pts[i]);
+            maxX = Math.max(maxX, pts[i]);
+            minY = Math.min(minY, pts[i + 1]);
+            maxY = Math.max(maxY, pts[i + 1]);
+          }
+          const w = maxX - minX;
+          const h = maxY - minY;
+          const distToStart = Math.sqrt(Math.pow(pts[0] - pts[pts.length - 2], 2) + Math.pow(pts[1] - pts[pts.length - 1], 2));
 
-        // If closed loop and reasonable size
-        if (distToStart < 60 && w > 30 && h > 30) {
-          const aspectRatio = Math.max(w, h) / Math.min(w, h);
-          
-          // Visual feedback for conversion
-          spawnReactionBurst('✨', minX + w/2, minY + h/2);
-
-          if (aspectRatio < 1.25) {
-            // Circle
-            shapeToSave = {
-              type: 'circle',
-              x: minX + w / 2,
-              y: minY + h / 2,
-              radiusX: w / 2,
-              radiusY: h / 2,
-              color: currentShape.color,
-              strokeWidth: currentShape.strokeWidth
-            };
-          } else if (aspectRatio > 2.0) {
-            // Triangle (Heuristic: high aspect ratio closed loops often intended as triangles or flat rects)
-            // But let's actually just do a better check or stick to Rect/Circle for now
-            // Unless I add a Triangle type. 
-            // Wait, Konva doesn't have a 'Triangle' but I can use 'RegularPolygon' or 'Line' with closed=true.
-            shapeToSave = {
-              type: 'rect',
-              x: minX,
-              y: minY,
-              width: w,
-              height: h,
-              color: currentShape.color,
-              strokeWidth: currentShape.strokeWidth
-            };
-          } else {
-            // Rect
-            shapeToSave = {
-              type: 'rect',
-              x: minX,
-              y: minY,
-              width: w,
-              height: h,
-              color: currentShape.color,
-              strokeWidth: currentShape.strokeWidth
-            };
+          if (distToStart < 60 && w > 30 && h > 30) {
+            const aspectRatio = Math.max(w, h) / Math.min(w, h);
+            spawnReactionBurst('✨', minX + w/2, minY + h/2);
+            if (aspectRatio < 1.25) {
+              shapeToSave = {
+                type: 'circle',
+                x: minX + w / 2,
+                y: minY + h / 2,
+                radiusX: w / 2,
+                radiusY: h / 2,
+                color: currentShape.color,
+                strokeWidth: currentShape.strokeWidth
+              };
+            } else {
+              shapeToSave = {
+                type: 'rect',
+                x: minX,
+                y: minY,
+                width: w,
+                height: h,
+                color: currentShape.color,
+                strokeWidth: currentShape.strokeWidth
+              };
+            }
           }
         }
       }
@@ -2249,6 +2267,13 @@ function Whiteboard() {
           >
             <Palette size={18} className={isBrandKitOpen ? "text-indigo-500" : ""} />
           </button>
+          <button 
+            className={`tool-btn ${isThemeGeneratorOpen ? 'active' : ''}`}
+            onClick={() => setIsThemeGeneratorOpen(true)}
+            title="AI Theme Studio"
+          >
+            <Wand2 size={18} className={isThemeGeneratorOpen ? "text-indigo-500" : ""} />
+          </button>
         </div>
         <div className="toolbar-divider" />
         <div className="toolbar-section">
@@ -2397,13 +2422,40 @@ function Whiteboard() {
                     <span className="toolbar-label">Component</span>
                     <button 
                         className={`tool-btn ${shapes[selectedId]?.isMaster ? 'active' : ''}`} 
-                        onClick={handleMakeMaster} 
-                        title="Make Master Component"
+                        onClick={handleMakeMaster}
+                        title="Convert to Master Component"
                     >
-                        <Zap size={18} className={shapes[selectedId]?.isMaster ? "text-yellow-400" : ""} />
+                        <Layers size={18} />
                     </button>
-                    <button className="tool-btn" onClick={handleDuplicate} title="Duplicate / Create Instance">
+                    <button 
+                        className="tool-btn"
+                        onClick={handleDuplicate}
+                        title="Duplicate (Alt+Drag)"
+                    >
                         <Plus size={18} />
+                    </button>
+                    <button 
+                        className="tool-btn bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                        onClick={() => {
+                           const updates = calculateLayoutUpdates([shapes[selectedId]], LAYOUT_TYPES.GRID, shapes[selectedId].x, shapes[selectedId].y);
+                           // Actually let's make it smarter: tidy up ALL shapes near the selected one
+                           const neighbors = Object.values(shapes).filter(s => 
+                              s.id !== selectedId && 
+                              Math.sqrt(Math.pow(s.x - shapes[selectedId].x, 2) + Math.pow(s.y - shapes[selectedId].y, 2)) < 500
+                           );
+                           const toArrange = [shapes[selectedId], ...neighbors];
+                           const updatesArr = calculateLayoutUpdates(toArrange, LAYOUT_TYPES.GRID, shapes[selectedId].x, shapes[selectedId].y);
+                           activeDoc.transact(() => {
+                               updatesArr.forEach(u => {
+                                   const prev = yShapesRef.current.get(u.id);
+                                   if (prev) yShapesRef.current.set(u.id, { ...prev, x: u.x, y: u.y });
+                               });
+                           }, 'local');
+                           spawnReactionBurst('🪄', shapes[selectedId].x, shapes[selectedId].y);
+                        }}
+                        title="Magic Tidy (Grid)"
+                    >
+                        <MousePointerSquare size={18} />
                     </button>
                     {shapes[selectedId]?.type === 'image' && (
                         <>
@@ -3090,6 +3142,23 @@ function Whiteboard() {
         onClose={() => setIsAutomationOpen(false)}
         ydoc={activeDoc}
         shapes={shapes}
+      />
+
+      <ThemeGenerator 
+        isOpen={isThemeGeneratorOpen}
+        onClose={() => setIsThemeGeneratorOpen(false)}
+        onApplyTheme={(theme) => {
+            activeDoc.transact(() => {
+                // Apply theme colors to all shapes!
+                Object.entries(shapes).forEach(([id, s]) => {
+                    if (s.type !== 'line' && s.type !== 'image') {
+                        yShapesRef.current.set(id, { ...s, color: theme.primary, fontFamily: theme.font });
+                    }
+                });
+            }, 'local');
+            setIsThemeGeneratorOpen(false);
+            spawnReactionBurst('🎨', window.innerWidth/2, window.innerHeight/2);
+        }}
       />
     </div>
   );
