@@ -5,7 +5,7 @@ import {
   Trash2, Download, Code, Undo2, Redo2, RotateCcw, Ruler, Grid3X3,
   Sparkles, Box, Zap, Layers, Highlighter, Gamepad2, LayoutTemplate,
   Presentation, Phone, Clock, BarChart3, Users, Link, Palette,
-  Globe, Network, GitCommit, Command, ArrowRight, Hash, Star, Video as VideoIcon
+  Globe, Network, GitCommit, Command, ArrowRight, Hash, Star, Video as VideoIcon, QrCode
 } from 'lucide-react';
 
 const COMMANDS = [
@@ -21,6 +21,7 @@ const COMMANDS = [
   { id: 'tool-chart', label: 'Chart Widget', icon: BarChart3, category: 'Tools', action: 'setTool', value: 'chart' },
   { id: 'tool-iframe', label: 'Embed (iframe)', icon: Globe, category: 'Tools', action: 'setTool', value: 'iframe' },
   { id: 'tool-video', label: 'Video Player', icon: VideoIcon, category: 'Tools', action: 'setTool', value: 'video' },
+  { id: 'tool-qr', label: 'QR Code Generator', icon: QrCode, category: 'Tools', action: 'addQRCode' },
   { id: 'tool-reaction-wheel', label: 'Reaction Wheel', icon: Sparkles, category: 'Tools', action: 'toggleReactionWheel', shortcut: 'E' },
   { id: 'tool-portal', label: 'Portal', icon: Network, category: 'Tools', action: 'setTool', value: 'portal' },
   { id: 'tool-code-widget', label: 'Code Widget', icon: Code, category: 'Tools', action: 'addCodeWidget' },

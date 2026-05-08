@@ -70,7 +70,8 @@ import VideoWidget from './components/VideoWidget.jsx';
 import ReactionWheel from './components/ReactionWheel.jsx';
 import ThemeGenerator from './components/ThemeGenerator.jsx';
 import useShapeRecognition from './hooks/useShapeRecognition.js';
-import { Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon, Wand2, MousePointerSquare } from 'lucide-react';
+import QRCodeWidget from './components/QRCodeWidget.jsx';
+import { Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon, Wand2, MousePointerSquare, QrCode } from 'lucide-react';
 import './index.css';
 
 // --- Server URL ---
@@ -1412,6 +1413,27 @@ function Whiteboard() {
         setSelectedId(id);
         break;
       }
+      case 'addQRCode': {
+        const id = 'qr-' + Date.now();
+        const pos = {
+          x: (window.innerWidth / 2 - stagePos.x) / stageScale - 100,
+          y: (window.innerHeight / 2 - stagePos.y) / stageScale - 125
+        };
+        yShapesRef.current.doc.transact(() => {
+          yShapesRef.current.set(id, {
+            id,
+            type: 'qr_code',
+            x: pos.x,
+            y: pos.y,
+            width: 200,
+            height: 250,
+            url: window.location.href,
+            visible: true
+          });
+        }, 'local');
+        setSelectedId(id);
+        break;
+      }
       case 'layout': {
         const allShapes = Object.values(shapes).filter(s => s.type !== 'line');
         const updates = calculateLayoutUpdates(allShapes, cmd.value, 400, 400);
@@ -1948,6 +1970,14 @@ function Whiteboard() {
               onNavigate={handleTransitionTo}
               draggable={tool === 'select' && !shape.locked}
             />
+          );
+        case 'qr_code':
+          return (
+            <Group key={id} {...commonProps}>
+              <Html divProps={{ style: { width: shape.width, height: shape.height } }}>
+                <QRCodeWidget shapeId={id} ydoc={activeDoc} initialUrl={shape.url} />
+              </Html>
+            </Group>
           );
         default: return null;
       }
