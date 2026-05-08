@@ -5,7 +5,7 @@ import {
   Trash2, Download, Code, Undo2, Redo2, RotateCcw, Ruler, Grid3X3,
   Sparkles, Box, Zap, Layers, Highlighter, Gamepad2, LayoutTemplate,
   Presentation, Phone, Clock, BarChart3, Users, Link, Palette,
-  Globe, Network, GitCommit, Command, ArrowRight, Hash, Star, Video as VideoIcon, QrCode
+  Globe, Network, GitCommit, Command, ArrowRight, Hash, Star, Video as VideoIcon, QrCode, Music
 } from 'lucide-react';
 
 const COMMANDS = [
@@ -48,6 +48,7 @@ const COMMANDS = [
   { id: 'panel-call', label: 'Voice / Video Call', icon: Phone, category: 'Panels', action: 'togglePanel', value: 'call' },
   { id: 'panel-code', label: 'Code Export', icon: Code, category: 'Panels', action: 'togglePanel', value: 'code' },
   { id: 'panel-brandkit', label: 'Brand Kit', icon: Palette, category: 'Panels', action: 'togglePanel', value: 'brandkit' },
+  { id: 'panel-soundboard', label: 'Soundboard (Audio)', icon: Music, category: 'Panels', action: 'togglePanel', value: 'soundboard' },
 
   // Toggles
   { id: 'toggle-3d', label: 'Toggle 3D View', icon: Box, category: 'View', action: 'toggle', value: '3d' },

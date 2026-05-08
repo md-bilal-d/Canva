@@ -168,6 +168,15 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Collaborative Soundboard Broadcast
+  socket.on('play-sound', (data) => {
+    if (!currentRoom) return;
+    socket.to(currentRoom).emit('play-sound', {
+      ...data,
+      userId: socket.id
+    });
+  });
+
   // Client disconnects
   socket.on('disconnect', () => {
     console.log(`[Socket] Client disconnected: ${socket.id}`);

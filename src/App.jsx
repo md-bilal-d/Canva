@@ -71,7 +71,8 @@ import ReactionWheel from './components/ReactionWheel.jsx';
 import ThemeGenerator from './components/ThemeGenerator.jsx';
 import useShapeRecognition from './hooks/useShapeRecognition.js';
 import QRCodeWidget from './components/QRCodeWidget.jsx';
-import { Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon, Wand2, MousePointerSquare, QrCode } from 'lucide-react';
+import Soundboard from './components/Soundboard.jsx';
+import { Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon, Wand2, MousePointerSquare, QrCode, Music } from 'lucide-react';
 import './index.css';
 
 // --- Server URL ---
@@ -289,6 +290,7 @@ function Whiteboard() {
   const [reactionWheelPos, setReactionWheelPos] = useState(null); // { x, y } screen coordinates
   const [isRecording, setIsRecording] = useState(false);
   const [isThemeGeneratorOpen, setIsThemeGeneratorOpen] = useState(false);
+  const [isSoundboardOpen, setIsSoundboardOpen] = useState(false);
   const [autoShapeEnabled, setAutoShapeEnabled] = useState(true);
   const recordingServiceRef = useRef(new RecordingService());
 
@@ -536,6 +538,15 @@ function Whiteboard() {
         }
         return prev;
       });
+    });
+
+    socket.on('play-sound', (data) => {
+      const audio = new Audio(data.url);
+      audio.volume = 0.5;
+      audio.play().catch(e => console.warn('Audio playback blocked:', e));
+      
+      // Spawn some visual feedback
+      spawnReactionBurst('🔊', window.innerWidth/2, window.innerHeight/2);
     });
 
     // Viewport Following Logic
@@ -1368,6 +1379,7 @@ function Whiteboard() {
           case 'call': setIsCallOpen(!isCallOpen); break;
           case 'code': setIsCodeExportOpen(!isCodeExportOpen); break;
           case 'brandkit': setIsBrandKitOpen(!isBrandKitOpen); break;
+          case 'soundboard': setIsSoundboardOpen(!isSoundboardOpen); break;
         }
         break;
       case 'toggleReactionWheel':
@@ -3188,6 +3200,21 @@ function Whiteboard() {
             }, 'local');
             setIsThemeGeneratorOpen(false);
             spawnReactionBurst('🎨', window.innerWidth/2, window.innerHeight/2);
+        }}
+      />
+
+      <Soundboard 
+        isOpen={isSoundboardOpen}
+        onClose={() => setIsSoundboardOpen(false)}
+        onPlaySound={(sound) => {
+            if (socketRef.current) {
+                socketRef.current.emit('play-sound', { url: sound.url, id: sound.id });
+            }
+            // Also play locally
+            const audio = new Audio(sound.url);
+            audio.volume = 0.5;
+            audio.play();
+            spawnReactionBurst('🔊', window.innerWidth/2, window.innerHeight/2);
         }}
       />
     </div>
