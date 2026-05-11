@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Trash2, Calendar, ChevronLeft, ChevronRight, Settings, X, Edit3, Check, BarChart2 } from 'lucide-react';
-import useGantt from '../hooks/useGantt';
+import useGantt from '../hooks/useGantt.js';
 
 export default function GanttChartWidget({ shapeId, ydoc }) {
   const { tasks, addTask, updateTask, deleteTask } = useGantt(ydoc, shapeId);
