@@ -5,7 +5,7 @@ import {
   Trash2, Download, Code, Undo2, Redo2, RotateCcw, Ruler, Grid3X3,
   Sparkles, Box, Zap, Layers, Highlighter, Gamepad2, LayoutTemplate,
   Presentation, Phone, Clock, BarChart3, Users, Link, Palette,
-  Globe, Network, GitCommit, Command, ArrowRight, Hash, Star, Video as VideoIcon, QrCode, Music
+  Globe, Network, GitCommit, Command, ArrowRight, Hash, Star, Video as VideoIcon, QrCode, Music, Calendar
 } from 'lucide-react';
 
 const COMMANDS = [
