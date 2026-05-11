@@ -1216,6 +1216,17 @@ function Whiteboard() {
       let shapeToSave = { ...currentShape };
       const id = 'shape-' + Date.now();
 
+      // Ensure a minimum size for widgets if they were just clicked
+      if (shapeToSave && shapeToSave.width < 10 && shapeToSave.height < 10) {
+        if (['chart', 'iframe', 'video', 'gantt', 'kanban', 'qr_code'].includes(shapeToSave.type)) {
+          shapeToSave.width = 600;
+          shapeToSave.height = 400;
+          // Center it
+          shapeToSave.x -= 300;
+          shapeToSave.y -= 200;
+        }
+      }
+
       // AUTO-SHAPE CONVERSION 
       if (currentShape.type === 'line' && currentShape.points.length > 10) {
         const pts = currentShape.points;
@@ -1314,7 +1325,7 @@ function Whiteboard() {
 
     setIsDrawing(false);
     setCurrentShape(null);
-  }, [isDrawing, isPanning, currentShape, tool, selectedId]);
+  }, [isDrawing, isPanning, currentShape, tool, selectedId, shapes, autoShapeEnabled, recognize]);
 
   // Momentum Loop
   useEffect(() => {
@@ -1466,8 +1477,9 @@ function Whiteboard() {
     }
   }, [
     handleClear, handleExport, handleCopyLink,
-    isAIOpen, isTemplatesOpen, isScenesOpen, isLayersOpen, isTimerOpen, isAnalyticsOpen, isShareOpen, isCallOpen, isCodeExportOpen, isBrandKitOpen,
-    is3DEnabled, isPhysicsEnabled, isHeatmapEnabled, isSketchMode, isSandboxMode, isGridEnabled
+    isAIOpen, isTemplatesOpen, isScenesOpen, isLayersOpen, isTimerOpen, isAnalyticsOpen, isShareOpen, isCallOpen, isCodeExportOpen, isBrandKitOpen, isSoundboardOpen,
+    is3DEnabled, isPhysicsEnabled, isHeatmapEnabled, isSketchMode, isSandboxMode, isGridEnabled,
+    stagePos, stageScale, shapes, activeDoc, recalculateForShape
   ]);
 
 
@@ -2203,6 +2215,9 @@ function Whiteboard() {
           <button className={`tool-btn ${tool === 'portal' ? 'active' : ''}`} onClick={() => { setTool('portal'); setActiveEmoji(null); }} title="Navigation Portal">
             <Compass size={18} />
           </button>
+          <button className={`tool-btn ${tool === 'qr' ? 'active' : ''}`} onClick={() => { setTool('qr'); setActiveEmoji(null); }} title="QR Code Generator">
+            <QrCode size={18} />
+          </button>
           <button className="tool-btn" onClick={() => handleTidyUp(LAYOUT_TYPES.GRID)} title="Tidy Up (Grid)">
             <Grid3X3 size={18} className="text-blue-500" />
           </button>
@@ -2433,6 +2448,13 @@ function Whiteboard() {
             title="Play Tic Tac Toe"
           >
             <Gamepad2 size={18} className={isTicTacToeOpen ? "text-pink-500" : ""} />
+          </button>
+          <button 
+            className={`tool-btn ${isSoundboardOpen ? 'active' : ''}`} 
+            onClick={() => setIsSoundboardOpen(!isSoundboardOpen)} 
+            title="Shared Soundboard"
+          >
+            <Music size={18} className={isSoundboardOpen ? "text-indigo-500" : ""} />
           </button>
         </div>
         <div className="toolbar-divider" />
