@@ -25,6 +25,7 @@ const COMMANDS = [
   { id: 'tool-reaction-wheel', label: 'Reaction Wheel', icon: Sparkles, category: 'Tools', action: 'toggleReactionWheel', shortcut: 'E' },
   { id: 'tool-portal', label: 'Portal', icon: Network, category: 'Tools', action: 'setTool', value: 'portal' },
   { id: 'tool-code-widget', label: 'Code Widget', icon: Code, category: 'Tools', action: 'addCodeWidget' },
+  { id: 'tool-gantt', label: 'Gantt Chart', icon: Calendar, category: 'Tools', action: 'setTool', value: 'gantt' },
 
   // Actions
   { id: 'action-undo', label: 'Undo', icon: Undo2, category: 'Actions', action: 'undo', shortcut: 'Ctrl+Z' },

@@ -20,7 +20,7 @@ import {
   Pencil, Square, CircleIcon, Trash2,
   Undo2, Redo2, RotateCcw, MousePointer2,
   Minus, Plus, Palette, Link, Check, StickyNote, X, Download,
-  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code, Ruler, Grid3X3, BarChart3, Globe, Compass, Gamepad2, Layers, MoveRight, Lock, Unlock
+  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code, Ruler, Grid3X3, BarChart3, Globe, Compass, Gamepad2, Layers, MoveRight, Lock, Unlock, Calendar
 } from 'lucide-react';
 import useConnectors, { computeConnectorPoints, getShapeEdgePoints } from './hooks/useConnectors.js';
 import CallPanel from './components/CallPanel.jsx';
@@ -72,6 +72,7 @@ import ThemeGenerator from './components/ThemeGenerator.jsx';
 import useShapeRecognition from './hooks/useShapeRecognition.js';
 import QRCodeWidget from './components/QRCodeWidget.jsx';
 import Soundboard from './components/Soundboard.jsx';
+import GanttChartWidget from './components/GanttChartWidget.jsx';
 import { Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon, Wand2, MousePointerSquare, QrCode, Music } from 'lucide-react';
 import './index.css';
 
@@ -1057,6 +1058,8 @@ function Whiteboard() {
       setIsDrawing(false);
       setTool('select');
       return;
+    } else if (tool === 'gantt') {
+      setCurrentShape({ type: 'gantt', x: pos.x, y: pos.y, width: 0, height: 0 });
     }
   }, [tool, color, strokeWidth, spaceHeld, stagePos, getRelativePointerPos]);
 
@@ -1166,7 +1169,7 @@ function Whiteboard() {
         ...prev,
         points: [start.x, start.y, pos.x, pos.y],
       }));
-    } else if (tool === 'chart' || tool === 'iframe' || tool === 'frame' || tool === 'video') {
+    } else if (tool === 'chart' || tool === 'iframe' || tool === 'frame' || tool === 'video' || tool === 'gantt') {
       const start = drawStartRef.current;
       setCurrentShape(prev => ({
         ...prev,
@@ -1991,6 +1994,14 @@ function Whiteboard() {
               </Html>
             </Group>
           );
+        case 'gantt':
+          return (
+            <Group key={id} {...commonProps}>
+              <Html divProps={{ style: { width: shape.width, height: shape.height } }}>
+                <GanttChartWidget shapeId={id} ydoc={activeDoc} />
+              </Html>
+            </Group>
+          );
         default: return null;
       }
     });
@@ -2179,6 +2190,9 @@ function Whiteboard() {
           </button>
           <button className={`tool-btn ${tool === 'chart' ? 'active' : ''}`} onClick={() => { setTool('chart'); setActiveEmoji(null); }} title="Interactive Chart">
             <BarChart3 size={18} />
+          </button>
+          <button className={`tool-btn ${tool === 'gantt' ? 'active' : ''}`} onClick={() => { setTool('gantt'); setActiveEmoji(null); }} title="Gantt Chart">
+            <Calendar size={18} />
           </button>
           <button className={`tool-btn ${tool === 'iframe' ? 'active' : ''}`} onClick={() => { setTool('iframe'); setActiveEmoji(null); }} title="Web Portal">
             <Globe size={18} />
