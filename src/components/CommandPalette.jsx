@@ -18,7 +18,7 @@ const COMMANDS = [
   { id: 'tool-connector', label: 'Connector Tool', icon: GitCommit, category: 'Tools', action: 'setTool', value: 'connector' },
   { id: 'tool-dimension', label: 'Dimension Line', icon: Ruler, category: 'Tools', action: 'setTool', value: 'dimension' },
   { id: 'tool-frame', label: 'Frame Tool', icon: Square, category: 'Tools', action: 'setTool', value: 'frame' },
-  { id: 'tool-chart', label: 'Chart Widget', icon: BarChart3, category: 'Tools', action: 'setTool', value: 'chart' },
+  { id: 'tool-chart', label: 'Chart Widget', icon: PollIcon, category: 'Tools', action: 'setTool', value: 'chart' },
   { id: 'tool-iframe', label: 'Embed (iframe)', icon: Globe, category: 'Tools', action: 'setTool', value: 'iframe' },
   { id: 'tool-video', label: 'Video Player', icon: VideoIcon, category: 'Tools', action: 'setTool', value: 'video' },
   { id: 'tool-qr', label: 'QR Code Generator', icon: QrCode, category: 'Tools', action: 'addQRCode' },
