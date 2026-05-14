@@ -2574,7 +2574,7 @@ function Whiteboard() {
                                    if (prev) yShapesRef.current.set(u.id, { ...prev, x: u.x, y: u.y });
                                });
                            }, 'local');
-                           spawnReactionBurst('🪄', shapes[selectedId].x, shapes[selectedId].y);
+                            addReaction('🪄', shapes[selectedId].x, shapes[selectedId].y);
                         }}
                         title="Magic Tidy (Grid)"
                     >
@@ -3321,7 +3321,7 @@ function Whiteboard() {
                 });
             }, 'local');
             setIsThemeGeneratorOpen(false);
-            spawnReactionBurst('🎨', window.innerWidth/2, window.innerHeight/2);
+            addReaction('🎨', window.innerWidth/2, window.innerHeight/2);
         }}
       />
 
@@ -3336,7 +3336,7 @@ function Whiteboard() {
             const audio = new Audio(sound.url);
             audio.volume = 0.5;
             audio.play();
-            spawnReactionBurst('🔊', window.innerWidth/2, window.innerHeight/2);
+            addReaction('🔊', window.innerWidth/2, window.innerHeight/2);
         }}
       />
     </div>
