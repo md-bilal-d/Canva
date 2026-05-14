@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactPlayer from 'react-player';
-import { Play, Pause, Youtube, Video, Maximize2, Settings, Link as LinkIcon, RotateCcw } from 'lucide-react';
+import { Play, Pause, Video, Maximize2, Settings, Link as LinkIcon, RotateCcw } from 'lucide-react';
 import * as Y from 'yjs';
 
 export default function VideoWidget({ shapeId, ydoc, initialUrl }) {
@@ -107,7 +107,7 @@ export default function VideoWidget({ shapeId, ydoc, initialUrl }) {
       {/* Top Bar */}
       <div className="flex items-center justify-between px-4 py-2 bg-slate-800/50 border-b border-slate-700 transition-opacity">
         <div className="flex items-center gap-2 flex-1">
-          <Youtube size={16} className="text-red-500" />
+          <Video size={16} className="text-red-500" />
           {isEditing ? (
             <input 
               className="flex-1 bg-slate-900 text-xs px-2 py-1 rounded border border-slate-600 text-slate-100 outline-none focus:border-indigo-500"

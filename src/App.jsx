@@ -75,7 +75,7 @@ import usePolls from './hooks/usePolls.js';
 import useAgenda from './hooks/useAgenda.js';
 import PollWidget, { PollCreationModal } from './components/PollWidget.jsx';
 import AgendaSidebar from './components/AgendaSidebar.jsx';
-import { Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon, Wand2, MousePointerSquare, QrCode, Music, BarChart3 as PollIcon, ListTodo } from 'lucide-react';
+import { Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon, Wand2, QrCode, Music, BarChart3 as PollIcon, ListTodo } from 'lucide-react';
 import './index.css';
 
 // --- Server URL ---
@@ -2578,7 +2578,7 @@ function Whiteboard() {
                         }}
                         title="Magic Tidy (Grid)"
                     >
-                        <MousePointerSquare size={18} />
+                        <MousePointer2 size={18} />
                     </button>
                     {shapes[selectedId]?.type === 'image' && (
                         <>
