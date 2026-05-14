@@ -4,7 +4,7 @@ import {
   Search, Pencil, Square, CircleIcon, MousePointer2, StickyNote,
   Trash2, Download, Code, Undo2, Redo2, RotateCcw, Ruler, Grid3X3,
   Sparkles, Box, Zap, Layers, Highlighter, Gamepad2, LayoutTemplate,
-  Presentation, Phone, Clock, BarChart3, Users, Link, Palette,
+  Presentation, Phone, Clock, Users, Link, Palette,
   Globe, Network, GitCommit, Command, ArrowRight, Hash, Star, Video as VideoIcon, QrCode, Music, Calendar, LayoutGrid, ListTodo, BarChart3 as PollIcon, Workflow
 } from 'lucide-react';
 
@@ -47,7 +47,7 @@ const COMMANDS = [
   { id: 'panel-scenes', label: 'Presentation Scenes', icon: Presentation, category: 'Panels', action: 'togglePanel', value: 'scenes' },
   { id: 'panel-layers', label: 'Layers Panel', icon: Layers, category: 'Panels', action: 'togglePanel', value: 'layers' },
   { id: 'panel-timer', label: 'Collaborative Timer', icon: Clock, category: 'Panels', action: 'togglePanel', value: 'timer' },
-  { id: 'panel-analytics', label: 'Board Analytics', icon: BarChart3, category: 'Panels', action: 'togglePanel', value: 'analytics' },
+  { id: 'panel-analytics', label: 'Board Analytics', icon: PollIcon, category: 'Panels', action: 'togglePanel', value: 'analytics' },
   { id: 'panel-share', label: 'Share Settings', icon: Users, category: 'Panels', action: 'togglePanel', value: 'share' },
   { id: 'panel-call', label: 'Voice / Video Call', icon: Phone, category: 'Panels', action: 'togglePanel', value: 'call' },
   { id: 'panel-code', label: 'Code Export', icon: Code, category: 'Panels', action: 'togglePanel', value: 'code' },

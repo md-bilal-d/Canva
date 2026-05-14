@@ -20,7 +20,7 @@ import {
   Pencil, Square, CircleIcon, Trash2,
   Undo2, Redo2, RotateCcw, MousePointer2,
   Minus, Plus, Palette, Link, Check, StickyNote, X, Download,
-  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code, Ruler, Grid3X3, BarChart3, Globe, Compass, Gamepad2, Layers, MoveRight, Lock, Unlock, Calendar,
+  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code, Ruler, Grid3X3, Globe, Compass, Gamepad2, Layers, MoveRight, Lock, Unlock, Calendar,
   Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon, Wand2, QrCode, Music, BarChart3 as PollIcon, ListTodo
 } from 'lucide-react';
 import useConnectors, { computeConnectorPoints, getShapeEdgePoints } from './hooks/useConnectors.js';
@@ -2229,7 +2229,7 @@ function Whiteboard() {
             <Ruler size={18} />
           </button>
           <button className={`tool-btn ${tool === 'chart' ? 'active' : ''}`} onClick={() => { setTool('chart'); setActiveEmoji(null); }} title="Interactive Chart">
-            <BarChart3 size={18} />
+            <PollIcon size={18} />
           </button>
           <button className={`tool-btn ${tool === 'gantt' ? 'active' : ''}`} onClick={() => { setTool('gantt'); setActiveEmoji(null); }} title="Gantt Chart">
             <Calendar size={18} />
@@ -2457,7 +2457,7 @@ function Whiteboard() {
             onClick={() => setIsAnalyticsOpen(!isAnalyticsOpen)} 
             title="Board Analytics"
           >
-            <BarChart3 size={18} className={isAnalyticsOpen ? "text-indigo-500" : ""} />
+            <PollIcon size={18} className={isAnalyticsOpen ? "text-indigo-500" : ""} />
           </button>
           <button 
             className={`tool-btn ${isAutomationOpen ? 'active' : ''}`} 
