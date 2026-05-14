@@ -20,7 +20,8 @@ import {
   Pencil, Square, CircleIcon, Trash2,
   Undo2, Redo2, RotateCcw, MousePointer2,
   Minus, Plus, Palette, Link, Check, StickyNote, X, Download,
-  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code, Ruler, Grid3X3, BarChart3, Globe, Compass, Gamepad2, Layers, MoveRight, Lock, Unlock, Calendar
+  LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code, Ruler, Grid3X3, BarChart3, Globe, Compass, Gamepad2, Layers, MoveRight, Lock, Unlock, Calendar,
+  Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon, Wand2, QrCode, Music, BarChart3 as PollIcon, ListTodo
 } from 'lucide-react';
 import useConnectors, { computeConnectorPoints, getShapeEdgePoints } from './hooks/useConnectors.js';
 import CallPanel from './components/CallPanel.jsx';
@@ -75,7 +76,6 @@ import usePolls from './hooks/usePolls.js';
 import useAgenda from './hooks/useAgenda.js';
 import PollWidget, { PollCreationModal } from './components/PollWidget.jsx';
 import AgendaSidebar from './components/AgendaSidebar.jsx';
-import { Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon, Wand2, QrCode, Music, BarChart3 as PollIcon, ListTodo } from 'lucide-react';
 import './index.css';
 
 // --- Server URL ---
