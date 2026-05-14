@@ -11,19 +11,37 @@ A high-performance, real-time collaborative whiteboard built with **React**, **K
 
 ## ✨ Features
 
-- **🛡️ Real-time Collaboration**: Powered by Yjs (CRDTs), ensuring zero-conflict state synchronization even with high latency.
+- **🛡️ Real-time Collaboration**: Powered by **Yjs (CRDTs)**, ensuring zero-conflict state synchronization even with high latency.
 - **⚡ High-Performance Rendering**: Split-layer canvas architecture (Grid/Static/Active) ensuring 60fps interaction.
 - **🎨 Professional Toolbar**:
-  - Precision Pen tool with smooth tension.
-  - Shapes (Rectangle, Circle) with live preview.
-  - Sticky Notes with collaborative text editing.
-  - Color picker and stroke width adjustment.
-- **🖱️ Select & Manipulate**: Use the **Select Tool** to drag, resize, and re-arrange existing shapes.
-- **🖼️ Image Support**: Effortlessly drag and drop images directly onto the canvas.
-- **🔍 Infinite Canvas**: Seamless panning (Space + Drag) and zooming (Wheel).
-- **🔄 Undo/Redo**: Full history support using Yjs UndoManager.
-- **🔗 Instant Sharing**: Create private rooms by simply sharing the unique URL.
-- **📦 Export**: Capture the entire whiteboard as a high-quality PNG.
+  - Precision Pen tool with smooth tension and **AI Shape Recognition**.
+  - Shapes (Rectangle, Circle) and **Dimension Lines** for precision design.
+  - **Sticky Notes** with collaborative text editing.
+- **📦 Advanced Widgets**:
+  - **Kanban Board**: Manage tasks directly on the canvas.
+  - **Gantt Chart**: Collaborative timeline and project planning.
+  - **Interactive Charts**: Visualize data with live-updating Chart.js widgets.
+  - **Web Portals**: Embed iframes and external websites.
+- **🔮 Immersive Experience**:
+  - **3D View**: Perspective-based canvas manipulation with tilt and depth.
+  - **Portal Shapes**: Teleport across the infinite canvas.
+- **🤖 AI Powered Studio**:
+  - **AI Image Studio**: Generate and upscale images with AI.
+  - **Magic Tidy**: Instantly arrange shapes in perfect grids or circles.
+  - **AI Theme Studio**: Generate cohesive brand kits and UI themes.
+- **📞 Integrated Communication**:
+  - **Voice & Video Calls**: Real-time collaboration without leaving the app.
+  - **Shared Soundboard**: Interactive audio triggers for the whole team.
+- **🖱️ Select & Manipulate**: Resizing, rotation, and multi-select smart layouts.
+- **🔄 Productivity Suite**:
+  - **Shared Timer**: Collaborative countdown for workshops.
+  - **Workflow Automations**: Script-based automation for board tasks.
+  - **History Scrubber**: Visual timeline for undo/redo.
+- **🕹️ Fun & Utilities**:
+  - **Physics Engine**: Realistic gravity and collisions for shapes.
+  - **Activity Heatmap**: Visualize user engagement on the board.
+  - **QR Code Generator**: Instant board access via QR.
+  - **Tic Tac Toe**: Interactive mini-games for breaks.
 
 ---
 
@@ -33,6 +51,8 @@ A high-performance, real-time collaborative whiteboard built with **React**, **K
 - **React 18** + **Vite**
 - **React-Konva**: Full-featured 2D canvas drawing engine.
 - **Yjs**: Cross-device state synchronization via CRDTs.
+- **Framer Motion**: Smooth UI transitions and micro-animations.
+- **Chart.js**: Dynamic data visualization.
 - **Lucide-React**: Modern, crisp iconography.
 
 ### Backend

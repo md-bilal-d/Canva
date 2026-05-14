@@ -26,6 +26,9 @@ const COMMANDS = [
   { id: 'tool-portal', label: 'Portal', icon: Network, category: 'Tools', action: 'setTool', value: 'portal' },
   { id: 'tool-code-widget', label: 'Code Widget', icon: Code, category: 'Tools', action: 'addCodeWidget' },
   { id: 'tool-gantt', label: 'Gantt Chart', icon: Calendar, category: 'Tools', action: 'setTool', value: 'gantt' },
+  { id: 'tool-kanban', label: 'Kanban Board', icon: LayoutGrid, category: 'Tools', action: 'setTool', value: 'kanban' },
+  { id: 'action-launch-poll', label: 'Launch Poll', icon: PollIcon, category: 'Tools', action: 'setPollCreationOpen', value: true },
+  { id: 'action-open-agenda', label: 'Open Agenda', icon: ListTodo, category: 'Tools', action: 'setAgendaOpen', value: true },
 
   // Actions
   { id: 'action-undo', label: 'Undo', icon: Undo2, category: 'Actions', action: 'undo', shortcut: 'Ctrl+Z' },

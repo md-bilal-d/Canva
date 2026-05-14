@@ -70,10 +70,12 @@ import VideoWidget from './components/VideoWidget.jsx';
 import ReactionWheel from './components/ReactionWheel.jsx';
 import ThemeGenerator from './components/ThemeGenerator.jsx';
 import useShapeRecognition from './hooks/useShapeRecognition.js';
-import QRCodeWidget from './components/QRCodeWidget.jsx';
-import Soundboard from './components/Soundboard.jsx';
-import GanttChartWidget from './components/GanttChartWidget.jsx';
-import { Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon, Wand2, MousePointerSquare, QrCode, Music } from 'lucide-react';
+import useUserProfile from './hooks/useUserProfile.js';
+import usePolls from './hooks/usePolls.js';
+import useAgenda from './hooks/useAgenda.js';
+import PollWidget, { PollCreationModal } from './components/PollWidget.jsx';
+import AgendaSidebar from './components/AgendaSidebar.jsx';
+import { Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon, Wand2, MousePointerSquare, QrCode, Music, BarChart3 as PollIcon, ListTodo } from 'lucide-react';
 import './index.css';
 
 // --- Server URL ---
@@ -279,6 +281,8 @@ function Whiteboard() {
   const [transitionProgress, setTransitionProgress] = useState(0);
   const [isBrandKitOpen, setIsBrandKitOpen] = useState(false);
   const [isSandboxMode, setIsSandboxMode] = useState(false);
+  const [isPollCreationOpen, setIsPollCreationOpen] = useState(false);
+  const [isAgendaOpen, setIsAgendaOpen] = useState(false);
   const [isLayersOpen, setIsLayersOpen] = useState(false);
   const [isTimerOpen, setIsTimerOpen] = useState(false);
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
@@ -412,6 +416,28 @@ function Whiteboard() {
   const { theme, toggleTheme, isDark } = useTheme();
   const timerProps = useSharedTimer(activeDoc, true);
   const { stats, loading: analyticsLoading } = useAnalytics(roomId);
+  
+  const {
+    polls,
+    createPoll,
+    vote,
+    closePoll,
+    deletePoll,
+    getVoteCount,
+    getTotalVotes
+  } = usePolls(activeDoc, currentUser.id);
+
+  const {
+    items: agendaItems,
+    notes: agendaNotes,
+    currentItemId,
+    addItem: addAgendaItem,
+    removeItem: removeAgendaItem,
+    setCurrentItem: setAgendaCurrentItem,
+    updateNotes: updateAgendaNotes,
+    exportNotes: exportAgendaNotes
+  } = useAgenda(activeDoc);
+
   const { settings, updateVisibility, inviteMember, removeMember, loading: settingsLoading } = useBoardSettings(roomId);
 
   useEffect(() => {
@@ -1060,6 +1086,8 @@ function Whiteboard() {
       return;
     } else if (tool === 'gantt') {
       setCurrentShape({ type: 'gantt', x: pos.x, y: pos.y, width: 0, height: 0 });
+    } else if (tool === 'kanban') {
+      setCurrentShape({ type: 'kanban', x: pos.x, y: pos.y, width: 0, height: 0 });
     }
   }, [tool, color, strokeWidth, spaceHeld, stagePos, getRelativePointerPos]);
 
@@ -2206,6 +2234,9 @@ function Whiteboard() {
           <button className={`tool-btn ${tool === 'gantt' ? 'active' : ''}`} onClick={() => { setTool('gantt'); setActiveEmoji(null); }} title="Gantt Chart">
             <Calendar size={18} />
           </button>
+          <button className={`tool-btn ${tool === 'kanban' ? 'active' : ''}`} onClick={() => { setTool('kanban'); setActiveEmoji(null); }} title="Kanban Board">
+            <LayoutGrid size={18} />
+          </button>
           <button className={`tool-btn ${tool === 'iframe' ? 'active' : ''}`} onClick={() => { setTool('iframe'); setActiveEmoji(null); }} title="Web Portal">
             <Globe size={18} />
           </button>
@@ -2448,6 +2479,20 @@ function Whiteboard() {
             title="Play Tic Tac Toe"
           >
             <Gamepad2 size={18} className={isTicTacToeOpen ? "text-pink-500" : ""} />
+          </button>
+          <button 
+            className={`tool-btn ${isPollCreationOpen ? 'active' : ''}`} 
+            onClick={() => setIsPollCreationOpen(!isPollCreationOpen)} 
+            title="Launch Poll"
+          >
+            <PollIcon size={18} className={isPollCreationOpen ? "text-orange-500" : ""} />
+          </button>
+          <button 
+            className={`tool-btn ${isAgendaOpen ? 'active' : ''}`} 
+            onClick={() => setIsAgendaOpen(!isAgendaOpen)} 
+            title="Meeting Agenda"
+          >
+            <ListTodo size={18} className={isAgendaOpen ? "text-emerald-500" : ""} />
           </button>
           <button 
             className={`tool-btn ${isSoundboardOpen ? 'active' : ''}`} 
@@ -3154,6 +3199,47 @@ function Whiteboard() {
         onClose={() => setIsTicTacToeOpen(false)} 
         ydoc={activeDoc} 
         currentUser={currentUser} 
+      />
+
+      <AnimatePresence>
+        {isPollCreationOpen && (
+          <PollCreationModal 
+            onClose={() => setIsPollCreationOpen(false)} 
+            onCreate={(data) => {
+              const viewportCenter = { 
+                x: (-stagePos.x + window.innerWidth / 2) / stageScale,
+                y: (-stagePos.y + window.innerHeight / 2) / stageScale 
+              };
+              createPoll({ ...data, x: viewportCenter.x, y: viewportCenter.y });
+            }} 
+          />
+        )}
+      </AnimatePresence>
+
+      {Object.values(polls).map(poll => (
+        <PollWidget 
+          key={poll.id}
+          poll={poll}
+          currentUserId={currentUser.id}
+          onVote={vote}
+          onClose={() => deletePoll(poll.id)}
+          getTotalVotes={getTotalVotes}
+          getVoteCount={getVoteCount}
+        />
+      ))}
+
+      <AgendaSidebar 
+        isOpen={isAgendaOpen}
+        onClose={() => setIsAgendaOpen(false)}
+        items={agendaItems}
+        notes={agendaNotes}
+        currentItemId={currentItemId}
+        onAddItem={addAgendaItem}
+        onRemoveItem={removeAgendaItem}
+        onSetCurrentItem={setAgendaCurrentItem}
+        onUpdateNotes={updateAgendaNotes}
+        onExportNotes={exportAgendaNotes}
+        currentUser={currentUser}
       />
 
       {isRecording && (
