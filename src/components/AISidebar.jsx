@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, TerminalSquare, Send, X, Loader2, Palette } from 'lucide-react';
+import { Sparkles, TerminalSquare, Send, X, Loader2, Palette, Network } from 'lucide-react';
 import { insertDesignFromAI } from '../utils/AIDispatcher';
 import * as Y from 'yjs';
 

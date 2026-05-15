@@ -76,6 +76,10 @@ import usePolls from './hooks/usePolls.js';
 import useAgenda from './hooks/useAgenda.js';
 import PollWidget, { PollCreationModal } from './components/PollWidget.jsx';
 import AgendaSidebar from './components/AgendaSidebar.jsx';
+import Soundboard from './components/Soundboard.jsx';
+import QRCodeWidget from './components/QRCodeWidget.jsx';
+import GanttChartWidget from './components/GanttChartWidget.jsx';
+import MindMapWidget from './components/MindMapWidget.jsx';
 import './index.css';
 
 // --- Server URL ---
@@ -296,6 +300,7 @@ function Whiteboard() {
   const [isRecording, setIsRecording] = useState(false);
   const [isThemeGeneratorOpen, setIsThemeGeneratorOpen] = useState(false);
   const [isSoundboardOpen, setIsSoundboardOpen] = useState(false);
+  const [isBrainstormingMode, setIsBrainstormingMode] = useState(false);
   const [autoShapeEnabled, setAutoShapeEnabled] = useState(true);
   const recordingServiceRef = useRef(new RecordingService());
 
@@ -573,7 +578,7 @@ function Whiteboard() {
       audio.play().catch(e => console.warn('Audio playback blocked:', e));
       
       // Spawn some visual feedback
-      spawnReactionBurst('🔊', window.innerWidth/2, window.innerHeight/2);
+      addReaction('🔊', window.innerWidth/2, window.innerHeight/2);
     });
 
     // Viewport Following Logic
@@ -1488,6 +1493,25 @@ function Whiteboard() {
         setSelectedId(id);
         break;
       }
+      case 'addMindMap': {
+        const id = 'mindmap-' + Date.now();
+        const pos = {
+          x: (window.innerWidth / 2 - stagePos.x) / stageScale - 300,
+          y: (window.innerHeight / 2 - stagePos.y) / stageScale - 250
+        };
+        yShapesRef.current.doc.transact(() => {
+          yShapesRef.current.set(id, {
+            id,
+            type: 'mindmap_widget',
+            x: pos.x,
+            y: pos.y,
+            width: 600,
+            height: 500
+          });
+        }, 'local');
+        setSelectedId(id);
+        break;
+      }
       case 'layout': {
         const allShapes = Object.values(shapes).filter(s => s.type !== 'line');
         const updates = calculateLayoutUpdates(allShapes, cmd.value, 400, 400);
@@ -2042,6 +2066,14 @@ function Whiteboard() {
               </Html>
             </Group>
           );
+        case 'mindmap_widget':
+          return (
+            <Group key={id} {...commonProps}>
+              <Html divProps={{ style: { width: shape.width, height: shape.height } }}>
+                <MindMapWidget shapeId={id} ydoc={activeDoc} />
+              </Html>
+            </Group>
+          );
         default: return null;
       }
     });
@@ -2087,7 +2119,7 @@ function Whiteboard() {
   const zoomPercent = Math.round(stageScale * 100);
 
   return (
-    <div className="canvas-container relative w-full h-full overflow-hidden bg-slate-50">
+    <div className={`canvas-container relative w-full h-full overflow-hidden transition-colors duration-1000 ${isBrainstormingMode ? 'bg-slate-950' : 'bg-slate-50'}`}>
       <DynamicBackground ydoc={activeDoc} />
       
       <div 
@@ -2095,8 +2127,11 @@ function Whiteboard() {
         style={{
           backgroundPosition: `${stagePos.x}px ${stagePos.y}px`,
           backgroundSize: `${20 * stageScale}px ${20 * stageScale}px, ${20 * stageScale}px ${20 * stageScale}px, ${100 * stageScale}px ${100 * stageScale}px, ${100 * stageScale}px ${100 * stageScale}px`,
+          backgroundImage: isBrainstormingMode 
+            ? `radial-gradient(circle, rgba(99, 102, 241, 0.15) 1px, transparent 1px), radial-gradient(circle, rgba(99, 102, 241, 0.05) 1px, transparent 1px)`
+            : undefined,
           transform: is3DEnabled ? `perspective(1200px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)` : 'none',
-          transition: isPanning ? 'none' : 'transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)'
+          transition: isPanning ? 'none' : 'transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), background-color 1s ease'
         }}
       >
       {currentUser.isGuest && <GuestBanner />}
@@ -2161,6 +2196,42 @@ function Whiteboard() {
                 followUserId={followUserId}
                 remoteCursors={remoteCursors}
               />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isBrainstormingMode && (
+          <motion.div
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -50 }}
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-[1003] pointer-events-none"
+          >
+            <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-700 p-2 rounded-2xl shadow-2xl flex items-center gap-3 pointer-events-auto">
+                <div className="flex items-center gap-2 px-3 border-r border-slate-700 mr-2">
+                    <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Brainstorming</span>
+                </div>
+                <button 
+                    onClick={() => handleCommand({ action: 'addMindMap' })}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-500/20"
+                >
+                    <Network size={14} /> New Mind Map
+                </button>
+                <button 
+                    onClick={() => handleCommand({ action: 'setTool', value: 'note' })}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition border border-slate-700"
+                >
+                    <StickyNote size={14} /> Sticky Notes
+                </button>
+                <button 
+                    onClick={() => setIsBrainstormingMode(false)}
+                    className="p-2 text-slate-500 hover:text-slate-300 transition"
+                >
+                    <X size={16} />
+                </button>
             </div>
           </motion.div>
         )}
@@ -2500,6 +2571,13 @@ function Whiteboard() {
             title="Shared Soundboard"
           >
             <Music size={18} className={isSoundboardOpen ? "text-indigo-500" : ""} />
+          </button>
+          <button 
+            className={`tool-btn ${isBrainstormingMode ? 'active' : ''}`} 
+            onClick={() => setIsBrainstormingMode(!isBrainstormingMode)} 
+            title="Brainstorming Mode"
+          >
+            <Network size={18} className={isBrainstormingMode ? "text-indigo-500 animate-pulse" : ""} />
           </button>
         </div>
         <div className="toolbar-divider" />
