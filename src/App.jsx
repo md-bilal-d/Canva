@@ -21,7 +21,8 @@ import {
   Undo2, Redo2, RotateCcw, MousePointer2,
   Minus, Plus, Palette, Link, Check, StickyNote, X, Download,
   LayoutTemplate, Phone, GitCommit, Sparkles, Network, Presentation, Box, Highlighter, Zap, Code, Ruler, Grid3X3, Globe, Compass, Gamepad2, Layers, MoveRight, Lock, Unlock, Calendar,
-  Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon, Wand2, QrCode, Music, BarChart3 as PollIcon, ListTodo
+  Clock, Users, ImageIcon, LayoutGrid, Type, Workflow, Minimize2, Maximize2, Video as VideoIcon, Wand2, QrCode, Music, BarChart3 as PollIcon, ListTodo,
+  MessageSquare, BrainCircuit, Calculator
 } from 'lucide-react';
 import useConnectors, { computeConnectorPoints, getShapeEdgePoints } from './hooks/useConnectors.js';
 import CallPanel from './components/CallPanel.jsx';
@@ -80,6 +81,9 @@ import Soundboard from './components/Soundboard.jsx';
 import QRCodeWidget from './components/QRCodeWidget.jsx';
 import GanttChartWidget from './components/GanttChartWidget.jsx';
 import MindMapWidget from './components/MindMapWidget.jsx';
+import ChatSidebar from './components/ChatSidebar.jsx';
+import FlashcardWidget from './components/FlashcardWidget.jsx';
+import CalculatorWidget from './components/CalculatorWidget.jsx';
 import './index.css';
 
 // --- Server URL ---
@@ -300,6 +304,7 @@ function Whiteboard() {
   const [isRecording, setIsRecording] = useState(false);
   const [isThemeGeneratorOpen, setIsThemeGeneratorOpen] = useState(false);
   const [isSoundboardOpen, setIsSoundboardOpen] = useState(false);
+  const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(false);
   const [isBrainstormingMode, setIsBrainstormingMode] = useState(false);
   const [autoShapeEnabled, setAutoShapeEnabled] = useState(true);
   const recordingServiceRef = useRef(new RecordingService());
@@ -1394,6 +1399,18 @@ function Whiteboard() {
   }, [shapes]);
 
 
+  const handleTidyUp = useCallback((type) => {
+    const allShapes = Object.values(shapes).filter(s => s.type !== 'line');
+    const updates = calculateLayoutUpdates(allShapes, type, 100, 100);
+    activeDoc.transact(() => {
+        updates.forEach(u => {
+            const prev = yShapesRef.current.get(u.id);
+            if (prev) yShapesRef.current.set(u.id, { ...prev, x: u.x, y: u.y });
+        });
+    }, 'local');
+    spawnReactionBurst('🪄', window.innerWidth/2, window.innerHeight/2);
+  }, [shapes, activeDoc]);
+
   const handleCommand = useCallback((cmd) => {
     switch (cmd.action) {
       case 'setTool':
@@ -1427,6 +1444,7 @@ function Whiteboard() {
           case 'code': setIsCodeExportOpen(!isCodeExportOpen); break;
           case 'brandkit': setIsBrandKitOpen(!isBrandKitOpen); break;
           case 'soundboard': setIsSoundboardOpen(!isSoundboardOpen); break;
+          case 'chat': setIsChatSidebarOpen(!isChatSidebarOpen); break;
         }
         break;
       case 'toggleReactionWheel':
@@ -1507,6 +1525,44 @@ function Whiteboard() {
             y: pos.y,
             width: 600,
             height: 500
+          });
+        }, 'local');
+        setSelectedId(id);
+        break;
+      }
+      case 'addFlashcards': {
+        const id = 'flash-' + Date.now();
+        const pos = {
+          x: (window.innerWidth / 2 - stagePos.x) / stageScale - 200,
+          y: (window.innerHeight / 2 - stagePos.y) / stageScale - 250
+        };
+        yShapesRef.current.doc.transact(() => {
+          yShapesRef.current.set(id, {
+            id,
+            type: 'flashcard_widget',
+            x: pos.x,
+            y: pos.y,
+            width: 400,
+            height: 500
+          });
+        }, 'local');
+        setSelectedId(id);
+        break;
+      }
+      case 'addCalculator': {
+        const id = 'calc-' + Date.now();
+        const pos = {
+          x: (window.innerWidth / 2 - stagePos.x) / stageScale - 125,
+          y: (window.innerHeight / 2 - stagePos.y) / stageScale - 200
+        };
+        yShapesRef.current.doc.transact(() => {
+          yShapesRef.current.set(id, {
+            id,
+            type: 'calculator_widget',
+            x: pos.x,
+            y: pos.y,
+            width: 250,
+            height: 400
           });
         }, 'local');
         setSelectedId(id);
@@ -2074,6 +2130,22 @@ function Whiteboard() {
               </Html>
             </Group>
           );
+        case 'flashcard_widget':
+          return (
+            <Group key={id} {...commonProps}>
+              <Html divProps={{ style: { width: shape.width, height: shape.height } }}>
+                <FlashcardWidget shapeId={id} ydoc={activeDoc} />
+              </Html>
+            </Group>
+          );
+        case 'calculator_widget':
+          return (
+            <Group key={id} {...commonProps}>
+              <Html divProps={{ style: { width: shape.width, height: shape.height } }}>
+                <CalculatorWidget shapeId={id} ydoc={activeDoc} />
+              </Html>
+            </Group>
+          );
         default: return null;
       }
     });
@@ -2121,6 +2193,13 @@ function Whiteboard() {
   return (
     <div className={`canvas-container relative w-full h-full overflow-hidden transition-colors duration-1000 ${isBrainstormingMode ? 'bg-slate-950' : 'bg-slate-50'}`}>
       <DynamicBackground ydoc={activeDoc} />
+      
+      <ChatSidebar 
+        ydoc={activeDoc}
+        currentUser={currentUser}
+        isOpen={isChatSidebarOpen}
+        onClose={() => setIsChatSidebarOpen(false)}
+      />
       
       <div 
         className={`relative w-full h-full ${spaceHeld || isPanning ? 'panning' : ''} animate-fade-in`}
@@ -2578,6 +2657,27 @@ function Whiteboard() {
             title="Brainstorming Mode"
           >
             <Network size={18} className={isBrainstormingMode ? "text-indigo-500 animate-pulse" : ""} />
+          </button>
+          <button 
+            className={`tool-btn ${isChatSidebarOpen ? 'active' : ''}`} 
+            onClick={() => setIsChatSidebarOpen(!isChatSidebarOpen)} 
+            title="Toggle Team Chat"
+          >
+            <MessageSquare size={18} className={isChatSidebarOpen ? "text-indigo-500" : ""} />
+          </button>
+          <button 
+            className="tool-btn" 
+            onClick={() => handleCommand({ action: 'addFlashcards' })} 
+            title="Add Flashcard Deck"
+          >
+            <BrainCircuit size={18} className="text-emerald-500" />
+          </button>
+          <button 
+            className="tool-btn" 
+            onClick={() => handleCommand({ action: 'addCalculator' })} 
+            title="Add Shared Calculator"
+          >
+            <Calculator size={18} className="text-indigo-400" />
           </button>
         </div>
         <div className="toolbar-divider" />
